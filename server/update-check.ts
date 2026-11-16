@@ -136,6 +136,7 @@ export function createUpdateChecker(options: {
   }
 
   return async function check(): Promise<UpdateCheck> {
+    if (options.current.includes("-topbot.")) return base();
     if (options.install === "desktop" || options.install === "managed") return base();
     if (cached && now() - cached.at < CACHE_MS) return cached.result;
     inflight ??= (async () => {

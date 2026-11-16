@@ -165,7 +165,7 @@ export function TeamPeopleCard({ team }: { team: { name: string; cloudPage?: str
   </Card>;
 }
 
-/** One MausBot account, shown as two pages: `account` (who is signed in, sign in and out) and `plan` (the plan, its Cloud
+/** One TopBot account, shown as two pages: `account` (who is signed in, sign in and out) and `plan` (the plan, its Cloud
  * and cancelling it). */
 export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamHome, onAddCloud, onSignIn, part = "plan", advanced = true, usage = null, upgrade, extra, avatar }: {
   /** the person's picture, for the account card's leading slot */
@@ -234,7 +234,7 @@ export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamH
   const [moveNotice] = useCloudSendNotice(bridge ? window.ogb?.cloudSendPage : undefined);
   const move = moveNotice?.move ? moveLine(moveNotice.move, "local") : null;
   const moving = move && move.kind !== "done" ? move.text : null;
-  const offer = useCloudOffer(Boolean(account) && buyOfferAllowed(cloudPlanView(account)), account?.offer);
+  const offer = useCloudOffer(false, account?.offer);
   const renewal: CloudRenewalActions | null = bridge?.cancelPlan && bridge.keepPlan ? { cancel: survey => bridge.cancelPlan!(survey), keep: () => bridge.keepPlan!() } : null;
   if (!bridge) {
     const plan = window.ogb?.remoteClient?.active || !cloudHome ? undefined : window.ogb?.cloudPlan;
@@ -243,6 +243,7 @@ export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamH
       : plan ? <CloudPlanOnCloud bridge={plan} usage={usage} upgrade={upgrade} extra={extra} /> : <p className="px-4 text-[13px] text-ink-secondary">{t("cloudAccount.desktopOnly")}</p>;
   }
   const view = cloudPlanView(account);
+  if (part === "plan" && ["free", "signed-out"].includes(view.kind)) return null;
   const signed = account && ["connected", "unavailable", "reauth-required"].includes(account.status);
   const message = accountMessage(account, view, platform);
   const line = cloudPlanLine(view);
@@ -282,6 +283,7 @@ export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamH
         </SettingsRows>
         {signed && view.kind === "free" && !confirm && <p className="px-4 text-[12px] leading-4 text-ink-secondary">{t(window.ogb?.accounts ? "cloudAccount.otherEmailOrTeam" : "cloudAccount.otherEmail")}{" "}
           <button type="button" data-cloud-other-email disabled={busy} className="cursor-pointer text-accent-text hover:underline" onClick={() => (window.ogb?.accounts ? setAddingEmail(true) : setConfirm("other-email"))}>{t(window.ogb?.accounts ? "cloudAccount.addOtherEmail" : "cloudAccount.useOtherEmail")}</button></p>}
+        {signed && account.staging && <StagingMark />}
         {errorLine}
       </SettingsGroup>
       {addingEmail && <AccountsSheet adding="" onClose={() => setAddingEmail(false)} />}

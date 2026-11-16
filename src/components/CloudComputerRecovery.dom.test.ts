@@ -67,12 +67,12 @@ describe("the computer's own state line", () => {
     expect(line()).toContain("Awake. It last answered at");
   });
 
-  it("leaves the line to the recovery while MausBot is restarting the computer", async () => {
+  it("leaves the line to the recovery while TopBot is restarting the computer", async () => {
     answering = { state: "not-responding", since: 1, lastAnsweredAt: null };
     status = { state: "restarting", at: 2 };
     await render(false);
     expect(line()).toBeNull();
-    expect(host.textContent).toContain("MausBot is restarting it");
+    expect(host.textContent).toContain("TopBot is restarting it");
   });
 });
 
@@ -82,10 +82,10 @@ describe("the computer panel's recovery row", () => {
     expect(host.querySelector("[data-testid=cloud-computer-recovery]")).toBeNull();
   });
 
-  it("shows what MausBot did, in Simple mode too, with the buttons", async () => {
+  it("shows what TopBot did, in Simple mode too, with the buttons", async () => {
     status = { state: "replaced", at: 1 };
     await render(false);
-    expect(host.textContent).toContain("Ada's cloud computer stopped responding, so MausBot replaced it with a new one. Files that were only on the old computer are gone.");
+    expect(host.textContent).toContain("Ada's cloud computer stopped responding, so TopBot replaced it with a new one. Files that were only on the old computer are gone.");
     expect(button("Restart computer")).toBeTruthy();
     expect(button("Replace computer")).toBeTruthy();
   });
@@ -93,7 +93,7 @@ describe("the computer panel's recovery row", () => {
   it("holds the buttons while a restart or replacement is under way", async () => {
     status = { state: "replacing", at: 1 };
     await render();
-    expect(host.textContent).toContain("This cloud computer isn't responding. MausBot is replacing it.");
+    expect(host.textContent).toContain("This cloud computer isn't responding. TopBot is replacing it.");
     expect(button("Restart computer").disabled).toBe(true);
     expect(button("Replace computer").disabled).toBe(true);
   });

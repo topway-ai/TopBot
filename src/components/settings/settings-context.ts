@@ -9,11 +9,13 @@ import { railShown, usePlaces, type RailPlace } from "@/lib/places";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { useStore } from "@/state/store";
 import { workspacesAvailable } from "../WorkspacesSection";
+import { useAccountSummary } from "./account-summary";
 import type { SettingsContext } from "./settings-index";
 
 export function useSettingsContext(): SettingsContext {
   const { state } = useStore();
   const advanced = useAdvancedMode();
+  const account = useAccountSummary();
   const admin = useOwnerOrAdmin() === true;
   const places = usePlaces();
   const known = useKnownPlaceCount();
@@ -31,7 +33,7 @@ export function useSettingsContext(): SettingsContext {
     client,
     admin,
     places: known > 1 || (!ogb?.environments && railShown(places)),
-    plan: desktop ? Boolean(ogb?.cloudAccount || (ogb?.cloudPlan && cloud)) : cloud && !team && admin,
+    plan: desktop ? Boolean((account.signedIn && ogb?.cloudAccount) || (ogb?.cloudPlan && cloud)) : cloud && !team && admin,
     organization: Boolean(ogb?.organization) && !client,
     environments: Boolean(ogb?.environments),
     installations: workspacesAvailable(state.config),

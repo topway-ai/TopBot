@@ -1,4 +1,5 @@
 import type { IncomingMessage } from "node:http";
+import { createRequire } from "node:module";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -247,7 +248,7 @@ describe("scopes", () => {
     expect(clientBotPatchViolation({ xResearch: true })).toBe("xResearch");
     expect(clientBotPatchViolation({ recordBrowserSteps: true })).toBe("recordBrowserSteps");
     expect(clientBotPatchViolation([])).toBe("body");
-    // A Team Cloud member changes no team bot's look, which everyone sees; their own MausBot's they do.
+    // A Team Cloud member changes no team bot's look, which everyone sees; their own TopBot's they do.
     expect(clientBotPatchViolation({ color: "blue" }, false, true)).toBe("color");
     expect(clientBotPatchViolation({ avatarUrl: null }, false, true)).toBe("avatarUrl");
     expect(clientBotPatchViolation({ mascotBody: "cursor" }, false, true)).toBe("mascotBody");
@@ -798,11 +799,11 @@ describe("loopback trust: owner on one person's machine, service on a shared wor
 
   it("is always service on an OMB Cloud home, where a local request is only ever a process on the machine", () => {
     const pick = (env: NodeJS.ProcessEnv) => resolveLoopbackTrust({ env, desktopManaged: false, hostedWorkspace: false, cloudHome: true });
-    expect(pick({})).toEqual({ trust: "service", reason: "MausBot Cloud home", localBrowsers: false });
-    expect(pick({ OMB_LOOPBACK_TRUST: "service" })).toEqual({ trust: "service", reason: "MausBot Cloud home", localBrowsers: false });
+    expect(pick({})).toEqual({ trust: "service", reason: "Cloud service home", localBrowsers: false });
+    expect(pick({ OMB_LOOPBACK_TRUST: "service" })).toEqual({ trust: "service", reason: "Cloud service home", localBrowsers: false });
     const forced = pick({ OMB_LOOPBACK_TRUST: "owner" });
     expect(forced.trust).toBe("service");
-    expect(forced.warning).toMatch(/ignored on a MausBot Cloud home/);
+    expect(forced.warning).toMatch(/ignored on a Cloud service home/);
   });
 
   it("lets only the CLI that started the server, holding its secret, mint a pairing code under service trust", () => {
@@ -874,6 +875,17 @@ describe("a browser on this machine is not the owner", () => {
   it("refuses it under service trust too, where it would otherwise get the service routes", () => {
     expect(check(page, "/api/health", "GET", { trust: "service" }).auth).toBeNull();
     expect(check({ host: "127.0.0.1:8799" }, "/api/health", "GET", { trust: "service" }).auth?.kind).toBe("loopback");
+  });
+
+  it("accepts Electron's real header builder without changing the legacy wire name", () => {
+    const { desktopServerHeaders } = createRequire(import.meta.url)("../electron/desktop-server-auth.cjs");
+    const token = "a".repeat(43);
+    const sent: Record<string, string> = desktopServerHeaders(ownUi, { packaged: true, token });
+    const headers = Object.fromEntries(Object.entries(sent).map(([name, value]) => [name.toLowerCase(), value]));
+    expect(headers["x-openmausbot-desktop-owner"]).toBe(token);
+    expect(check(headers, "/api/bots", "GET", { desktopToken: token }).auth?.kind).toBe("loopback");
+    expect(check(headers, "/api/bots/bot-1", "PATCH", { desktopToken: token }).auth?.kind).toBe("loopback");
+    expect(check(headers, "/api/bots", "GET", { desktopToken: "b".repeat(43) }).auth).toBeNull();
   });
 
   it("lets the desktop app's own window in with its owner header, on http and WebSocket alike", () => {

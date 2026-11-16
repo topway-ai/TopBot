@@ -36,8 +36,8 @@ export function answeringLine(answering: CloudComputerAnswering | null, quiet: b
   return t(answering.state === "restoring" ? "computer.answering.restoring" : "computer.answering.waking");
 }
 
-/** What MausBot is doing about a cloud computer that stopped answering, and the person's Restart computer and Replace computer. */
-/** `always`: the buttons show even while nothing is wrong (Advanced); otherwise only once MausBot is dealing with the computer. */
+/** What TopBot is doing about a cloud computer that stopped answering, and the person's Restart computer and Replace computer. */
+/** `always`: the buttons show even while nothing is wrong (Advanced); otherwise only once TopBot is dealing with the computer. */
 export function CloudComputerRecoveryRow({ botId, name, always }: { botId: string; name: string; always?: boolean }) {
   const [recovery, setRecovery] = useState<CloudComputerRecovery | null>(null);
   const [answering, setAnswering] = useState<CloudComputerAnswering | null>(null);
@@ -73,7 +73,7 @@ export function CloudComputerRecoveryRow({ botId, name, always }: { botId: strin
   };
 
   const busy = pending !== null || Boolean(recovery && recoveryUnderWay(recovery.state));
-  // While MausBot is dealing with the computer its own line says more than this one.
+  // While TopBot is dealing with the computer its own line says more than this one.
   const state = recovery && recoveryUnderWay(recovery.state) ? null : answeringLine(answering, !always);
   if (!always && !recovery && !result && !state) return null;
   return (

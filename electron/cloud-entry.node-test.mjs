@@ -34,7 +34,7 @@ test("the Cloud protocol is a fixed action without URL routing or credentials", 
 });
 
 test("consuming a launch action prevents it replaying on a later restart without changing other arguments", () => {
-  const original = ["/Applications/OpenMausBot", "--profile=fixture", "openmausbot://cloud?ignored", "openmausbot://organization", "openmausbot://install/example"];
+  const original = ["/Applications/TopBot", "--profile=fixture", "openmausbot://cloud?ignored", "openmausbot://organization", "openmausbot://install/example"];
   const argv = [...original, "openmausbot://cloud", "openmausbot://cloud"];
   assert.equal(takeCloudDeepLink(argv), true);
   assert.deepEqual(argv, original);
@@ -44,9 +44,9 @@ test("consuming a launch action prevents it replaying on a later restart without
 
 test("a cold-start link waits until main can navigate, then opens exactly once", async () => {
   const h = fixture();
-  const argv = ["/Applications/OpenMausBot", "--fixture", "openmausbot://cloud"];
+  const argv = ["/Applications/TopBot", "--fixture", "openmausbot://cloud"];
   assert.equal(h.entry.fromLaunch(argv), true);
-  assert.deepEqual(argv, ["/Applications/OpenMausBot", "--fixture"]);
+  assert.deepEqual(argv, ["/Applications/TopBot", "--fixture"]);
   await settle();
   assert.deepEqual(h.calls, [], "no window exists to reveal or navigate yet");
   assert.equal(await h.entry.ready(), true);
@@ -57,7 +57,7 @@ test("a cold-start link waits until main can navigate, then opens exactly once",
 
 test("a launch without the link leaves nothing pending", async () => {
   const h = fixture();
-  assert.equal(h.entry.fromLaunch(["/Applications/OpenMausBot", "openmausbot://cloud/"]), false);
+  assert.equal(h.entry.fromLaunch(["/Applications/TopBot", "openmausbot://cloud/"]), false);
   assert.equal(await h.entry.ready(), false);
   assert.deepEqual(h.calls, []);
 });
@@ -78,11 +78,11 @@ test("once ready, open-url and a second instance open immediately and consume th
   assert.equal(h.entry.fromUrl("openmausbot://cloud"), true);
   await settle();
   assert.deepEqual(h.calls, ["reveal", "open"]);
-  const commandLine = ["C:\\OpenMausBot.exe", "--flag", "openmausbot://cloud"];
+  const commandLine = ["C:\\TopBot.exe", "--flag", "openmausbot://cloud"];
   assert.equal(h.entry.fromArgs(commandLine), true);
   await settle();
   assert.deepEqual(h.calls, ["reveal", "open", "reveal", "open"]);
-  assert.deepEqual(commandLine, ["C:\\OpenMausBot.exe", "--flag"]);
+  assert.deepEqual(commandLine, ["C:\\TopBot.exe", "--flag"]);
 });
 
 test("anything else is left to the other link handlers without revealing or opening", async () => {
@@ -110,7 +110,7 @@ test("a failed open is contained and a later link still opens", async () => {
 });
 
 test("a consumed launch link is not replayed by the companion or updater relaunch", () => {
-  const argv = ["/fixture/OpenMausBot", "--fixture", "openmausbot://cloud", "openmausbot://cloud?ignored"];
+  const argv = ["/fixture/TopBot", "--fixture", "openmausbot://cloud", "openmausbot://cloud?ignored"];
   takeCloudDeepLink(argv);
   const calls = [];
   runInNewContext(`${between("function relaunchAfterDesktopRemoteChange()", 'ipcMain.handle("desktop-remote:state"')}\nrelaunchAfterDesktopRemoteChange();`, {
@@ -168,6 +168,7 @@ test("Add a Cloud… is always the sheet on this computer's page, never a native
   assert.match(add, /const action = source === "app_howto" \? "cloud-add-howto" : "cloud-add";/);
   assert.deepEqual([...add.matchAll(/webContents\.send\(([^)]*)\)/g)].map(match => match[1]), ['"app:open-settings", action']);
   assert.deepEqual([...add.matchAll(/loadURL\((.*)\);/g)].map(match => match[1]), ["`${rendererOrigin()}/?desktop-settings=${action}`"]);
-  assert.match(between("function cloudOffersAllowed()", "\n}\n"), /return app\.isPackaged && !desktopRemoteAccess && brandedBuild === false;/);
-  assert.match(between("async function readCloudOfferBrand()", "\n}\n"), /fetch\(`http:\/\/127\.0\.0\.1:\$\{SERVER_PORT\}\/api\/brand`/);
+  assert.match(between("function cloudOffersAllowed()", "\n}\n"), /return false;/);
+  assert.equal(main.includes("readCloudOfferBrand"), false);
+  assert.match(between("async function cloudOffersReady()", "\n}\n"), /return cloudOffersAllowed\(\);/);
 });

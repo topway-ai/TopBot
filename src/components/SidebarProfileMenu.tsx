@@ -559,7 +559,7 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
   const besideRail = railShown(usePlaces());
   const filesReady = useCloudFilesReady();
   const desktop = Boolean(window.ogb);
-  const planHere = !remote && (desktop ? Boolean(window.ogb?.cloudAccount || (window.ogb?.cloudPlan && state.config?.cloudHome === true))
+  const planHere = !remote && (desktop ? Boolean((summary.signedIn && window.ogb?.cloudAccount) || (window.ogb?.cloudPlan && state.config?.cloudHome === true))
     : state.config?.cloudHome === true && !state.config?.team && isOwnerOrAdmin(session));
   const openSettings = (section: AppSettingsSection) => dispatch({ type: "toggleAppSettings", open: true, section });
   const move = useAccountMove(state.config?.cloudHome === true, { onOpen: () => openSettings("plan"), onPairPhone: () => dispatch(phonePairingSettingsAction()) });
@@ -604,7 +604,7 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
     onHelp: () => void openExternalLink(HELP_CENTER_URL),
     onFeedback: () => void openExternalLink(FEEDBACK_URL),
     onWhatsNew: () => void openExternalLink(RELEASES_URL),
-    // Every Sign out asks first: "Sign out of MausBot?" and what keeps running.
+    // Every Sign out asks first: "Sign out of TopBot?" and what keeps running.
     signOut: accounts.view?.active ? null
       : !desktop && session?.kind === "session" ? () => setSigningOut("browser")
       : desktop && !remote && window.ogb?.cloudAccount && summary.signedIn ? () => setSigningOut("desktop")

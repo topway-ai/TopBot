@@ -182,7 +182,7 @@ export function attachUpdaterWindow(mainWindow) {
 
 /** `signals` (quietSignals): what tells a quiet moment; without them a downloaded update installs only on Restart or quit. */
 export function startUpdater(signals = null) {
-  if (!app.isPackaged) {
+  if (!app.isPackaged || require("../package.json").topbot?.automaticUpdates === false) {
     updaterCoordinator = null;
     setState({ status: "idle" });
     return;

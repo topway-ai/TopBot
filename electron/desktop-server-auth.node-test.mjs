@@ -6,6 +6,10 @@ import authModule from "./desktop-server-auth.cjs";
 const { DESKTOP_MUTATION_HEADER, desktopServerHeaders } = authModule;
 const TOKEN = "a".repeat(43);
 
+test("product branding never changes the desktop capability wire header", () => {
+  assert.equal(DESKTOP_MUTATION_HEADER.toLowerCase(), "x-openmausbot-desktop-owner");
+});
+
 test("adds the owner capability to packaged main-process mutations", () => {
   assert.deepEqual(desktopServerHeaders(
     { "content-type": "application/json" },

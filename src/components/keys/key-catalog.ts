@@ -4,7 +4,6 @@ import type { SavedKey } from "@/state/config-status";
 import type { KeyProvider } from "@/lib/analytics-allowlist";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { reportModelgoOffer } from "@/lib/modelgo-offer";
 import type { ProviderIconPreset } from "../../../shared/provider-icon";
 import { MODELGO_URL } from "../../../shared/modelgo";
 
@@ -109,9 +108,8 @@ export const KEY_CATALOG: readonly KeyEntry[] = [
     words: ["greenference", "green", "open models"], mark: provider("greenference"), kind: "key",
     target: providerKey("greenference", { slot: "greenferenceApiKey", placeholder: "…", placeholderKey: "keys.greenference.placeholder", href: "https://greenference.com/dashboard/tokens", test: "greenference", analytics: "greenference" }) },
   { id: "modelgo", section: "ai", labelKey: "keys.modelgo.label", purposeKey: "keys.purpose.modelgo", name: "ModelGo", env: ["OMB_MODELGO_API_KEY"],
-    words: ["modelgo", "model go", "one key", "sponsor"], mark: provider("modelgo"), kind: "key",
-    target: providerKey("modelgo", { slot: "modelgoApiKey", placeholder: "…", placeholderKey: "keys.modelgo.placeholder", href: MODELGO_URL, test: "modelgo", analytics: "modelgo", noteKey: "keys.modelgo.note",
-      settingsEvent: (action) => reportModelgoOffer(action, "settings") }) },
+    words: ["modelgo", "model go", "one key"], mark: provider("modelgo"), kind: "key",
+    target: providerKey("modelgo", { slot: "modelgoApiKey", placeholder: "…", placeholderKey: "keys.modelgo.placeholder", href: MODELGO_URL, test: "modelgo", analytics: "modelgo" }) },
   { id: "meta", section: "ai", labelKey: "keys.meta.label", purposeKey: "keys.purpose.meta", name: "Meta", env: ["OMB_META_API_KEY"],
     words: ["meta", "muse", "llama"], mark: provider("meta", "meta"), kind: "key",
     target: providerKey("meta", { slot: "metaApiKey", placeholder: "LLM|…", href: "https://dev.meta.ai/docs/authentication", test: "meta", analytics: "meta", shape: /^LLM\|/ }) },

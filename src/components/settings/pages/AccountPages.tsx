@@ -11,7 +11,6 @@ import { CloudAccountSettings } from "../../CloudAccountSettings";
 import { useCloudUsageSettings } from "../../CloudUsageMeter";
 import { OrganizationSettings } from "../../OrganizationSettings";
 import { SettingRow, SettingsGroup, SettingsLinkRow, SettingsRows } from "../../SettingsPrimitives";
-import { UpdatesConsentRow } from "../../UpdatesConsent";
 import { useAccountSummary, useYou } from "../account-summary";
 import { useSettingsShell } from "../settings-shell";
 import { SpentRow } from "../plan-parts";
@@ -39,7 +38,7 @@ export function AccountPage() {
           : <SettingsLinkRow title={t("settings.account.nameRow")} badge={<PlaceBadge place={place} size={14} />} value={profileLabel(profile)} onClick={() => go("bots", "about-you")} data={{ "data-account-name-row": "" }} />}
       </SettingsRows>
     </SettingsGroup>
-    {bridge && <CloudAccountSettings part="account" advanced={ctx.advanced} linkRequest={state.appSettingsCloudLink} avatar={<YouAvatar size={32} />}
+    {bridge && (summary.signedIn || state.appSettingsCloudLink) && <CloudAccountSettings part="account" advanced={ctx.advanced} linkRequest={state.appSettingsCloudLink} avatar={<YouAvatar size={32} />}
       onSignIn={() => dispatch({ type: "openCloudAdd", source: "app_settings", signIn: true })} />}
     {elsewhere && (
       <SettingsGroup label={t("settings.account.mausbot", { app: productName() })} block="mausbot-account">
@@ -74,11 +73,6 @@ export function AccountPage() {
       // The organization sign-in is This computer's: it stays in place on a Cloud's page, inert, with the way there.
       <SettingsGroup label={t("settings.section.organization")} block="organization">
         <SettingsRows><InertRow title={t("settings.account.orgSignIn")} control={<button type="button" className="ui-button" tabIndex={-1}>{t("settings.account.signIn")}</button>} /></SettingsRows>
-      </SettingsGroup>
-    )}
-    {ctx.desktop && !ctx.client && window.ogb?.updatesConsent && (
-      <SettingsGroup label={t("settings.account.emails", { app: productName() })} block="emails">
-        <SettingsRows><UpdatesConsentRow /></SettingsRows>
       </SettingsGroup>
     )}
   </>;

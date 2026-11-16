@@ -1,4 +1,4 @@
-// Slack for Team Clouds, the Team Cloud's side (docs/team-slack.md). One MausBot Slack app is installed per company;
+// Slack for Team Clouds, the Team Cloud's side (docs/team-slack.md). One TopBot Slack app is installed per company;
 // Slack's events arrive at the Admin, which hands each message to the team's Cloud with a session it opened for the
 // member who wrote it, so here the message is that member's own request. This module holds the contract's wire shapes,
 // the record of the messages taken (the idempotency key and what the Admin has been told) and the signed report back.
