@@ -4,9 +4,11 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
+import ExcelJS from "exceljs";
 import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../../scripts/control-omb.ts";
 import { DATA_ROUTES, DATA_TOOL_NAMES, type DataCard, type DataSheet } from "../../shared/data-surface.ts";
 import { waitForExit } from "../testing/cleanup.ts";
+import { readZipDirectory } from "../zip-archive.ts";
 
 const CAPABILITY_KEY = "data-surface-e2e-capability";
 
@@ -47,7 +49,7 @@ it("loads, queries, shows, pages, renders and exports through the real server", 
     writeFileSync(csv, lines.join("\n") + "\n");
     mkdirSync(join(dataDir, "Downloads"), { recursive: true });
 
-    const minted = await api("POST", "/api/testing/internal-capability", { botId: bot.id, threadId, kind: "data" }, 201, { "x-openmausbot-test-capability": CAPABILITY_KEY });
+    let minted = await api("POST", "/api/testing/internal-capability", { botId: bot.id, threadId, kind: "data" }, 201, { "x-openmausbot-test-capability": CAPABILITY_KEY });
     const mcp = async (method: string, params?: unknown, token: string = minted.token) =>
       (await api("POST", "/api/internal/data/mcp", { method, params }, 200, { authorization: `Bearer ${token}` })).result;
     const call = async (name: string, args: Record<string, unknown>, token?: string) => {
@@ -176,9 +178,20 @@ it("loads, queries, shows, pages, renders and exports through the real server", 
     // Opt-in: downloads the real signed extensions into this fixture's empty cache.
     if (process.env.OMB_TEST_DUCKDB_EXTENSIONS === "1") {
       expect(existsSync(join(dataDir, "duckdb-extensions"))).toBe(false);
+      minted = await api("POST", "/api/testing/internal-capability", { botId: bot.id, threadId, kind: "data" }, 201, { "x-openmausbot-test-capability": CAPABILITY_KEY });
       const workbook = await call("data_export", { table: "sales", format: "xlsx" });
       expect(workbook.isError, workbook.text).toBe(false);
       expect(readFileSync(workbook.data.path).subarray(0, 2).toString()).toBe("PK");
+      expect((await readZipDirectory(workbook.data.path, 100)).map((entry) => entry.name)).toContain("xl/theme/theme1.xml");
+      const excel = new ExcelJS.Workbook();
+      await excel.xlsx.readFile(workbook.data.path);
+      expect(excel.worksheets[0]!.getCell("A1").font.bold).toBe(true);
+      expect(excel.worksheets[0]!.getColumn(1).width).toBeGreaterThanOrEqual(12);
+      const originalBytes = readFileSync(workbook.data.path);
+      const repeated = await call("data_export", { table: "sales", format: "xlsx", path: workbook.data.path });
+      expect(repeated.isError, repeated.text).toBe(false);
+      expect(repeated.data.path).not.toBe(workbook.data.path);
+      expect(readFileSync(workbook.data.path)).toEqual(originalBytes);
       // A second instance proves cached extensions load again, without relying on the exporter's LOAD.
       const { bot: reader } = await runControlOmb(["new-bot", "--name", "Workbook reader", "--url", url]) as { bot: { id: string; activeTaskId: string } };
       const readerToken = await api("POST", "/api/testing/internal-capability", { botId: reader.id, threadId: reader.activeTaskId, kind: "data" }, 201, { "x-openmausbot-test-capability": CAPABILITY_KEY });

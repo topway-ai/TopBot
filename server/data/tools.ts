@@ -21,6 +21,7 @@ import { compileToolSchema, schemaProblems } from "../mcp-schema-validator.ts";
 import { tableIdentifierParts } from "./identifiers.ts";
 import type { DataSheetStore } from "./sheet.ts";
 import { DataFailure, type BotDatabase, type ChartCompiler, type ChartRenderer, type DataConnection, type DataExtension, type RunOptions, type RunResult, type VegaLiteValidator } from "./types.ts";
+import { formatXlsxExport } from "./xlsx-format.ts";
 
 const IDENT = "^[A-Za-z_][A-Za-z0-9_]{0,62}$";
 const tool = (name: string, description: string, properties: Record<string, unknown>, required: string[] = []) =>
@@ -105,7 +106,7 @@ export const DATA_TOOLS = [
   ),
   tool(
     "data_export",
-    "Write a card (id), a loaded table or a SELECT to a file: csv, parquet or xlsx for data; png or svg for a chart card. The path must be inside the bot's working folder or the person's Downloads; default: Downloads.",
+    "Write a card (id), a loaded table or a SELECT to a file: csv, parquet or xlsx for data; png or svg for a chart card. Excel exports contain typed static values, not live spreadsheet formulas, with readable column widths and wrapped text for bounded exports. The path must be inside the bot's working folder or the person's Downloads; default: Downloads. Existing files are kept and a numbered filename is returned. Read the returned path back with data_load before claiming the saved content was verified.",
     {
       id: { type: "string", pattern: "^c_[0-9]+$" },
       table: { type: "string", minLength: 1, maxLength: 300 },
@@ -850,7 +851,7 @@ export async function showCard(context: DataContext, input: ShowInput, onCardRea
 }
 
 export interface ExportInput { id?: string; table?: string; sql?: string; format: DataExportFormat; path?: string; theme?: "light" | "dark"; width?: number; scale?: number }
-export interface ExportOutput { path: string; bytes: number; rowCount?: number }
+export interface ExportOutput { path: string; bytes: number; rowCount?: number; warnings?: string[] }
 
 const same = (a: string, b: string) => (process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b);
 const isUnder = (child: string, root: string) => same(child, root) || (process.platform === "win32" ? child.toLowerCase().startsWith(`${root.toLowerCase()}${sep}`) : child.startsWith(`${root}${sep}`));
@@ -957,7 +958,8 @@ export async function exportData(ctx: DataContext, input: ExportInput): Promise<
   return atExportPath(ctx, input, stem, async (path) => {
     const copied = await ctx.database.run(`COPY (SELECT * FROM ${relation}) TO ${quoteLiteral(path)} (${format})`, runOptions(ctx, { maxRows: 1, extensions: input.format === "xlsx" ? ["excel"] : [] }));
     const count = Number(copied.rows[0]?.[0]);
-    return { path, bytes: statSync(path).size, ...(Number.isFinite(count) ? { rowCount: count } : {}) };
+    const warnings = input.format === "xlsx" ? await formatXlsxExport(path, count) : [];
+    return { path, bytes: statSync(path).size, ...(Number.isFinite(count) ? { rowCount: count } : {}), ...(warnings.length ? { warnings } : {}) };
   });
 }
 

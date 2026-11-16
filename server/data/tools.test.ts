@@ -1,7 +1,9 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("./xlsx-format.ts", () => ({ formatXlsxExport: vi.fn(async () => []) }));
 
 import { DATA_LIMITS, DATA_TOOL_NAMES, type DataColumn } from "../../shared/data-surface.ts";
 import { FakeDataDatabase } from "../testing/fake-data-database.ts";
@@ -775,7 +777,7 @@ describe("data_export", () => {
     mkdirSync(outside);
     expect(await failure(exportData(ctx, { sql: "SELECT 1", format: "csv", path: join(outside, "x.csv") }))).toMatchObject({ code: "invalid_input", hint: expect.stringContaining(join(dir, "work")) });
     expect(await failure(exportData(ctx, { sql: "SELECT 1", format: "csv", path: "../elsewhere/x.csv" }))).toMatchObject({ code: "invalid_input" });
-    symlinkSync(outside, join(dir, "work", "link"));
+    symlinkSync(outside, join(dir, "work", "link"), "junction");
     expect(await failure(exportData(ctx, { sql: "SELECT 1", format: "csv", path: "link/x.csv" }))).toMatchObject({ code: "invalid_input" });
     expect(existsSync(join(outside, "x.csv"))).toBe(false);
     expect(() => resolveExportPath([], undefined, "q", "csv")).toThrow(DataFailure);

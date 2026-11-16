@@ -81,6 +81,8 @@ extraResources:
   # carries its license text, so the upstream file travels here.
   - from: third_party/onepassword-sdk/LICENSE
     to: licenses/1password-sdk-LICENSE.txt
+  - from: third_party/exceljs/LICENSE
+    to: licenses/exceljs-LICENSE.txt
   - from: dist
     to: ui
   - from: dist-server
