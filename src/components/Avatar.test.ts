@@ -73,6 +73,20 @@ describe("mascot facial feature colors", () => {
 });
 
 describe("BotAvatar's two avatar outcomes", () => {
+  it("uses the TopBot emblem for the unchanged default bot", () => {
+    const markup = renderBot({ name: "TopBot", defaultBot: {}, color: "chrome" });
+    expect(markup).toContain('src="/app-icon-192.png"');
+    expect(markup).toContain('alt="TopBot"');
+    expect(markup).not.toContain("<svg");
+  });
+
+  it("preserves customized default bot avatars and ordinary bots", () => {
+    for (const change of [{ avatarUrl: "/api/attachments/custom.png", avatarCrop: "circle" as const },
+      { mascotBody: "star" as const }, { mascotFaceColor: "black" as const }, { color: "green" as const }, { defaultBot: undefined }]) {
+      expect(renderBot({ defaultBot: {}, color: "chrome", ...change })).not.toContain('src="/app-icon-192.png"');
+    }
+  });
+
   it("zooms and positions a custom image inside its crop", () => {
     const markup = renderBot({
       avatarUrl: "/api/attachments/cat.webp",

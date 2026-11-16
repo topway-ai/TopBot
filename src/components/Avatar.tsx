@@ -225,6 +225,7 @@ export type BotAvatarProps = Omit<MausAvatarProps, "color" | "gradient"> & {
   readable?: boolean;
   bot: {
     name?: string;
+    defaultBot?: { person?: string } | null;
     color: MausColor;
     avatarUrl?: string | null;
     avatarCrop?: BotAvatarCrop;
@@ -263,6 +264,12 @@ export function BotAvatar({ bot, size = 44, label, readable = false, ...mascotPr
     hasUrl: Boolean(profile.avatarUrl),
     imageFailed,
   });
+
+  if (bot.defaultBot && !profile.avatarUrl && !bot.mascotFaceColor && bot.color === "chrome"
+    && (!bot.mascotBody || bot.mascotBody === "cursor")) {
+    return <img {...avatarMarks("bot", "picture")} src="/app-icon-192.png" alt={label ?? bot.name ?? "TopBot"}
+      width={size} height={size} draggable={false} className="block shrink-0 object-contain" style={{ width: size, height: size }} />;
+  }
 
   if (outcome !== "flatImage") {
     return (

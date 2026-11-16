@@ -1,3 +1,5 @@
+<img src="public/app-icon-192.png" width="80" height="80" alt="TopBot logo">
+
 # TopBot
 
 A local-first desktop application for chatting with AI agents and using tools.
@@ -6,6 +8,7 @@ A local-first desktop application for chatting with AI agents and using tools.
 
 - Repository: https://github.com/topway-ai/TopBot
 - Product name: TopBot.
+- The desktop and in-app icons use the TopWay-inspired TopBot identity.
 - Upstream promotional popups, sponsor placements, mailing-list invitations and advertisement downloads are removed from the desktop experience.
 - Updates are built and installed explicitly; upstream automatic updates are disabled.
 - Existing model connections, conversations and approval settings are preserved.
@@ -18,6 +21,10 @@ Requires Node.js 24 or newer and the package manager declared in package.json.
 pnpm install --frozen-lockfile
 pnpm dev
 ```
+
+Icon assets are generated from the approved artwork in `build/topbot-logo-source.png`.
+Run `pnpm build:icons` to rebuild Windows, macOS, Linux and web icon assets.
+The original horizontal logo is available at `public/topbot-logo.png`.
 
 Read [AGENTS.md](AGENTS.md), [DESIGN.md](DESIGN.md), and the
 [verification guide](docs/verification/README.md) before changing the application.
