@@ -1,0 +1,90 @@
+import assert from "node:assert/strict";
+import { spawn, execFile } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { cp, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const packaged = path.resolve(process.argv[2] || path.join(root, "release", "win-unpacked"));
+const previous = path.resolve(process.argv[3] || packaged);
+const build = JSON.parse(await readFile(path.join(packaged, "resources", "topbot-build.json"), "utf8"));
+const builder = createRequire(import.meta.resolve("electron-builder"));
+const asar = createRequire(builder.resolve("app-builder-lib"))("@electron/asar");
+const previousVersion = JSON.parse(asar.extractFile(path.join(previous, "resources", "app.asar"), "package.json").toString()).version;
+const scratch = path.join(root, ".omb-scratch");
+await mkdir(scratch, { recursive: true });
+const base = await mkdtemp(path.join(scratch, "update-package-"));
+const updates = process.argv.includes("--register-recovery")
+  ? await mkdtemp(path.join(os.homedir(), ".topbot-update-test-")) : path.join(base, "updates");
+const job = path.join(updates, "transactions", "qualification");
+const installDir = path.join(base, "Programs", "TopBot"), home = path.join(base, "home");
+const data = path.join(home, "data"), profile = path.join(home, "profile");
+const ps = (await promisify(execFile)("where.exe", ["pwsh.exe"], { windowsHide: true })).stdout.trim().split(/\r?\n/)[0];
+const env = { SystemRoot: process.env.SystemRoot, WINDIR: process.env.WINDIR, PATH: path.dirname(ps) + ";" + path.join(process.env.SystemRoot, "System32"),
+  HOME: home, USERPROFILE: home, APPDATA: path.join(home, "AppData", "Roaming"), LOCALAPPDATA: path.join(home, "AppData", "Local"),
+  TEMP: base, TMP: base, OMB_DATA_DIR: data, TOPBOT_UPDATE_ROOT: updates };
+for (const directory of [job, data, profile, env.APPDATA, env.LOCALAPPDATA]) await mkdir(directory, { recursive: true });
+await writeFile(path.join(data, "qualification.txt"), "Disposable update fixture. No real account or key.\n");
+console.log(JSON.stringify({ base, installDir, packaged, updates }));
+await cp(previous, installDir, { recursive: true, dereference: false });
+await cp(path.join(root, "electron", "topbot-update-runner.ps1"), path.join(job, "runner.ps1"));
+const zip = path.join(job, "update.zip");
+await promisify(execFile)(ps, ["-NoProfile", "-NonInteractive", "-File", path.join(root, "electron", "fixtures", "topbot-update-fixture.ps1"),
+  "-Mode", "ZipFast", "-Source", packaged, "-Destination", zip], { windowsHide: true, timeout: 240000 });
+const digest = createHash("sha256");
+for await (const chunk of createReadStream(zip)) digest.update(chunk);
+const size = (await stat(zip)).size;
+const plan = { schema: 1, version: build.version, previousVersion, dataEpoch: 1,
+  bytes: size, unpackedBytes: size + 16 * 1024 ** 2, sha256: digest.digest("hex"), installDir, profileDir: profile,
+  dataDirs: [data, profile], token: randomBytes(32).toString("hex") };
+await writeFile(path.join(job, "plan.json"), JSON.stringify(plan));
+const json = file => readFile(file, "utf8").then(JSON.parse);
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const report = { base, updates, version: build.version, archiveBytes: size, started: new Date().toISOString(), checks: [] };
+async function run(mode) {
+  const started = Date.now();
+  const child = spawn(ps, ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-File", path.join(job, "runner.ps1"),
+    "-Mode", mode, "-PlanPath", path.join(job, "plan.json"), ...(process.argv.includes("--register-recovery") ? [] : ["-NoRecoveryRegistration"])], { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  let output = "";
+  child.stdout.on("data", chunk => { output = (output + chunk).slice(-8000); });
+  child.stderr.on("data", chunk => { output = (output + chunk).slice(-8000); });
+  const done = new Promise((resolve, reject) => { child.once("error", reject); child.once("exit", code => resolve(code)); });
+  if (mode === "Apply") {
+    for (let i = 0; i < 150; i++) {
+      const receipt = await json(path.join(job, "helper-ready.json")).catch(() => null);
+      if (receipt?.pid === child.pid) { await writeFile(path.join(job, "go.json"), JSON.stringify({ token: plan.token, pid: child.pid })); break; }
+      if (child.exitCode !== null) break;
+      await pause(100);
+    }
+  }
+  const code = await done;
+  const state = await json(path.join(job, "state.json")).catch(() => null);
+  const result = { mode, code, seconds: (Date.now() - started) / 1000, state, output };
+  report.checks.push(result); console.log(JSON.stringify(result));
+  assert.equal(code, 0, output);
+  return state;
+}
+try {
+  assert.equal((await run("Prepare")).phase, "prepared");
+  assert.equal((await run("Apply")).phase, "committed");
+  const health = await json(path.join(job, "health.json"));
+  assert.equal(health.ready, true); assert.equal(health.version, build.version);
+  assert.equal(await readFile(path.join(data, "qualification.txt"), "utf8"), "Disposable update fixture. No real account or key.\n");
+  assert.ok((await stat(path.join(job, "previous", "TopBot.exe"))).isFile());
+  report.health = { ...health, token: "[omitted]" }; report.passed = true;
+} finally {
+  await writeFile(path.join(job, "stop.json"), JSON.stringify({ token: plan.token }));
+  await pause(5000);
+  assert.ok(installDir.startsWith(scratch + path.sep));
+  const expression = `$p = '${installDir.replaceAll("'", "''")}\\'; $left = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($p, [StringComparison]::OrdinalIgnoreCase) }); $left | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; $left.Count`;
+  const cleanup = await promisify(execFile)(ps, ["-NoProfile", "-NonInteractive", "-Command", expression], { windowsHide: true });
+  report.fixtureProcessesForcedClosed = Number(cleanup.stdout.trim());
+  report.ended = new Date().toISOString();
+  await writeFile(path.join(scratch, "topbot-update-package-result.json"), JSON.stringify(report, null, 2));
+  console.log(`Evidence: ${path.join(scratch, "topbot-update-package-result.json")}`);
+}

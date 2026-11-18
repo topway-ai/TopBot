@@ -612,6 +612,11 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
     signOutElsewhere: desktop && !remote && !here && !window.ogb?.cloudAccount && summary.signedIn && openComputer
       ? { place: t("rail.thisComputer"), open: () => void openComputer("account").catch(() => {}) } : null,
   });
+  const desktopMenu = window.ogb?.desktopMenu;
+  if (desktopMenu) items.push(
+    { key: "recovery", label: t("native.menu.recovery"), icon: <RefreshCw size={16} />, separatorBefore: true, onSelect: () => void desktopMenu.recovery() },
+    { key: "quit-app", label: t("native.menu.quitFully"), icon: <LogOut size={16} />, onSelect: () => void desktopMenu.quit() },
+  );
   const noteworthy = update && updateNoteworthy(update.phase, update.pending) && !updateHasButton(update.phase);
   const needsYou = account?.automationsNeedYou === true;
   const initials = profileInitials(profile);

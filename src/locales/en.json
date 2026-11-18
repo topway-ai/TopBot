@@ -9601,6 +9601,8 @@
   "native.common.close": "Close",
   "native.tray.open": "Open TopBot",
   "native.tray.quit": "Quit TopBot",
+  "native.menu.recovery": "Updates and recovery",
+  "native.menu.quitFully": "Quit TopBot completely",
   "native.lendTray.computer": "computer",
   "native.lend.server": "Server: {origin}",
   "native.lend.readWrite": "Read and write: {path}",

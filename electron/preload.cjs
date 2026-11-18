@@ -440,6 +440,10 @@ const bridge = {
       ? ipcRenderer.invoke("update:for-server-page") : Promise.reject(new Error("Choose Update app.")),
   },
 
+  ...(process.platform === "win32" && isLocalPage ? { desktopMenu: {
+    recovery: () => navigator.userActivation?.isActive === true ? ipcRenderer.invoke("desktop-menu:recovery") : Promise.resolve(),
+    quit: () => navigator.userActivation?.isActive === true ? ipcRenderer.invoke("desktop-menu:quit") : Promise.resolve(),
+  } } : {}),
   updater: {
     check: () => ipcRenderer.invoke("update:check"),
     install: () => isLocalPage || navigator.userActivation?.isActive === true

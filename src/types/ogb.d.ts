@@ -463,6 +463,7 @@ const __APP_VERSION__: string;
        * download by themselves. On this computer's page and the person's own
        * Cloud page; any other server's page gets no state. onState fires
        * with the current state, then on transitions. */
+      desktopMenu?: { recovery(): Promise<void>; quit(): Promise<void> };
       updater?: {
         check(): Promise<void>;
         /** apply the download: quit-and-install, or copy the command and open

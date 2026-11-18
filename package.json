@@ -1,7 +1,7 @@
 {
   "name": "topbot",
   "private": true,
-  "version": "0.1.161-topbot.4",
+  "version": "0.1.161-topbot.6",
   "description": "A local-first chat app for running a team of AI agents.",
   "homepage": "https://github.com/topway-ai/TopBot",
   "repository": {
@@ -16,7 +16,9 @@
   "desktopName": "com.openmausbot.app.desktop",
   "type": "module",
   "topbot": {
-    "automaticUpdates": false
+    "automaticUpdates": false,
+    "managedWindowsUpdates": true,
+    "dataEpoch": 1
   },
   "main": "electron/main.mjs",
   "engines": {

@@ -1,7 +1,7 @@
 import nativeText from "./native-text.cjs";
 
 // Retain the Windows notification-area identity across app restarts.
-export function createSystemTray({ Tray, Menu, nativeImage, iconPath, getWindow, onQuit, t = nativeText.englishText.t }) {
+export function createSystemTray({ Tray, Menu, nativeImage, iconPath, getWindow, onQuit, onUpdates, t = nativeText.englishText.t }) {
   const tray = new Tray(nativeImage.createFromPath(iconPath).resize({ width: 20, height: 20 }),
     "889af657-21b5-4ec9-b5d0-cb798cbdfd30");
   let hidden = false;
@@ -17,6 +17,7 @@ export function createSystemTray({ Tray, Menu, nativeImage, iconPath, getWindow,
   };
   const label = () => tray.setContextMenu(Menu.buildFromTemplate([
     { label: t("native.tray.open"), click: show },
+    ...(onUpdates ? [{ label: "Updates and recovery...", click: onUpdates }] : []),
     { type: "separator" },
     { label: t("native.tray.quit"), click: onQuit },
   ]));

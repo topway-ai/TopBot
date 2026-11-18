@@ -128,6 +128,10 @@ reply box and the Quick asks chat by hand on a packaged side-by-side build; the
 control surface cannot drive a global shortcut or the microphone, so it is not
 in the map above.
 
+The [TopBot Windows update recipe](topbot-updates.md) covers the independent
+transaction helper, data snapshots, real packaged startup and rollback.
+Native update controls and login recovery need separate desktop qualification.
+
 The [move to My Cloud fixture](cloud-send.md) runs this computer's server and a
 Cloud home with the desktop's own wiring between them, and runs and checks the
 one-time move as main does.

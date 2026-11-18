@@ -9565,6 +9565,8 @@
   "native.common.close": "关闭",
   "native.tray.open": "打开 TopBot",
   "native.tray.quit": "退出 TopBot",
+  "native.menu.recovery": "更新与恢复",
+  "native.menu.quitFully": "完全退出 TopBot",
   "native.lendTray.computer": "电脑",
   "native.lend.server": "Server：{origin}",
   "native.lend.readWrite": "读写：{path}",

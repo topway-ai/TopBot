@@ -1,0 +1,72 @@
+name: TopBot Windows Update
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the tested build to topway-ai/TopBot
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: topbot-windows-update
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.repository == 'topway-ai/TopBot' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      NODE_OPTIONS: --max-old-space-size=3072
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Transaction and failure tests
+        run: node --test --test-concurrency=1 electron/topbot-update.node-test.mjs electron/updater-coordinator.node-test.mjs electron/update-when-quiet.node-test.mjs electron/startup-tray.node-test.mjs
+      - name: Task pause regression
+        run: pnpm exec vitest run server/move-freeze.test.ts server/move-freeze-thaw.test.ts --maxWorkers=1
+      - run: pnpm package:win
+      - name: Packaged server smoke test
+        env:
+          OMB_SMOKE_DIST: ${{ github.workspace }}/release/win-unpacked/resources/server
+        run: node scripts/smoke-packaged-server.mjs
+      - name: Packaged update startup and backup qualification
+        run: node scripts/verify-topbot-update-package.mjs release/win-unpacked release/win-unpacked
+      - run: node scripts/topbot-update-manifest.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: topbot-windows-update
+          path: |
+            release/TopBot-*-x64.zip
+            release/topbot-windows-update.json
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    if: inputs.publish
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: topbot-windows-update
+          path: release
+      - name: Publish only after the complete artifact is uploaded
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: topway-ai/TopBot
+        run: |
+          version=$(jq -r .version release/topbot-windows-update.json)
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "Refusing to replace an existing release; bump the version first."
+            exit 1
+          fi
+          gh release create "v$version" --target "$GITHUB_SHA" --draft --title "TopBot $version" --notes "Windows update with program backup, health checks and rollback. Data format epoch 1."
+          gh release upload "v$version" release/TopBot-*-x64.zip release/topbot-windows-update.json
+          gh release edit "v$version" --draft=false --prerelease=false --latest=false

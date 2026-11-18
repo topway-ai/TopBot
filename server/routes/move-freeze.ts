@@ -20,7 +20,7 @@ export interface MoveFreezeRouteDeps {
   platform?: NodeJS.Platform;
 }
 
-const freezeBody = z.object({ cloud: z.string().url().max(300).optional(), place: z.string().trim().min(1).max(120).optional() });
+const freezeBody = z.object({ cloud: z.string().url().max(300).optional(), place: z.string().trim().min(1).max(120).optional(), temporary: z.boolean().optional() });
 const thawBody = z.object({ automations: z.literal("off").optional() });
 
 export function createMoveFreezeRoutes({ freeze, busy, restart, automationsOff, platform = process.platform }: MoveFreezeRouteDeps): RouteHandler {
@@ -52,7 +52,7 @@ export function createMoveFreezeRoutes({ freeze, busy, restart, automationsOff, 
         if (!freeze.frozen()) {
           const who = busy();
           if (who !== null) return json(res, 409, { error: "A bot is still working.", busy: who.name, what: who.what });
-          freeze.freeze(body.data.cloud ?? null, body.data.place ?? null);
+          freeze.freeze(body.data.cloud ?? null, body.data.place ?? null, body.data.temporary === true);
         }
         return json(res, 200, { frozen: true });
       }

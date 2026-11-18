@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMoveFreeze, ENDED_REFUSAL, HOME_SCREEN, MOVED_REFUSAL, movedRefusal, phoneMovedRefusal, RAIL_PAGE, switchAutomationsOff, type MoveAutomations } from "./move-freeze.ts";
 import type { MoveWait } from "./move-waits.ts";
@@ -11,7 +11,7 @@ import { WaitManager, type WaitNotice } from "./waits.ts";
 
 const dirs: string[] = [];
 const dataDir = () => { const dir = mkdtempSync(join(tmpdir(), "omb-move-freeze-")); dirs.push(dir); return dir; };
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => { vi.useRealTimers(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 function schedule() {
   const log: string[] = [];
@@ -19,6 +19,35 @@ function schedule() {
 }
 
 describe("this computer's copy, frozen at the move", () => {
+  it("releases a lost update handoff, without timing out a persistent move", () => {
+    vi.useFakeTimers();
+    const freeze = createMoveFreeze({ dataDir: dataDir() });
+    const jobs = schedule();
+    freeze.hold(jobs.start, jobs.stop);
+    freeze.freeze(null, null, true);
+    vi.advanceTimersByTime(29_999);
+    expect(freeze.frozen()).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(freeze.frozen()).toBe(false);
+    expect(jobs.log).toEqual(["start", "stop", "start"]);
+    freeze.freeze("https://example.com");
+    vi.advanceTimersByTime(60_000);
+    expect(freeze.frozen()).toBe(true);
+  });
+  it("temporarily pauses tasks for an update without freezing the next launch", () => {
+    const dir = dataDir();
+    const freeze = createMoveFreeze({ dataDir: dir });
+    const jobs = schedule();
+    freeze.hold(jobs.start, jobs.stop);
+    freeze.freeze(null, null, true);
+    expect(freeze.frozen()).toBe(true);
+    expect(() => freeze.assertTurns()).toThrow();
+    expect(jobs.log).toEqual(["start", "stop"]);
+    expect(existsSync(join(dir, "moved.json"))).toBe(false);
+    expect(createMoveFreeze({ dataDir: dir }).frozen()).toBe(false);
+    expect(freeze.unfreeze()).toBe(true);
+    expect(jobs.log).toEqual(["start", "stop", "start"]);
+  });
   it("stops every schedule it holds, stays frozen across a restart, and starts them again when lifted", () => {
     const dir = dataDir();
     const freeze = createMoveFreeze({ dataDir: dir });

@@ -16,6 +16,7 @@ import { openBlankTerminal } from "./terminal-launch.mjs";
 import { UPDATE_TEXT } from "./update-errors.mjs";
 import { createUpdaterCoordinator } from "./updater-coordinator.mjs";
 import { createQuietInstall, installFailed, launchAfter, LOOK_EVERY_MS, updateSeen } from "./update-when-quiet.mjs";
+import { createManagedUpdater } from "./topbot-managed-update.mjs";
 
 export { quietSignals } from "./update-when-quiet-main.mjs";
 
@@ -181,7 +182,21 @@ export function attachUpdaterWindow(mainWindow) {
 }
 
 /** `signals` (quietSignals): what tells a quiet moment; without them a downloaded update installs only on Restart or quit. */
-export function startUpdater(signals = null) {
+export function startUpdater(signals = null, managedOptions = null) {
+  if (app.isPackaged && process.platform === "win32" && managedOptions && require("../package.json").topbot?.managedWindowsUpdates === true) {
+    updaterCoordinator = createManagedUpdater({ ...managedOptions, version: app.getVersion(), signals, setState });
+    const coordinator = updaterCoordinator;
+    void coordinator.restore().catch(error => setState({ status: "error", message: error.message }));
+    if (signals) {
+      launched();
+      quiet = createQuietInstall({ updater: coordinator, signals, record: quietRecord(), version: app.getVersion(), log: line => updaterLogger().info(line) });
+      setInterval(() => void quiet?.look(), LOOK_EVERY_MS).unref?.();
+      signals.watch(() => quiet?.look());
+    }
+    setTimeout(() => void coordinator.check(), 30_000).unref?.();
+    setInterval(() => void coordinator.check(), 6 * 60 * 60 * 1000).unref?.();
+    return;
+  }
   if (!app.isPackaged || require("../package.json").topbot?.automaticUpdates === false) {
     updaterCoordinator = null;
     setState({ status: "idle" });
@@ -222,4 +237,25 @@ export function startUpdater(signals = null) {
 
   setTimeout(() => void updaterCoordinator?.check(), 15_000).unref?.();
   setInterval(() => void updaterCoordinator?.check(), 60 * 60 * 1000).unref?.();
+}
+
+export async function showManagedUpdates({ dialog, shell, parent }) {
+  const ask = options => parent && !parent.isDestroyed() ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);
+  if (!updaterCoordinator?.status) return;
+  try {
+    const details = await updaterCoordinator.status();
+    const answer = await ask({ type: "info", title: "TopBot updates and recovery",
+      message: `Current: ${details.current}\nPrepared: ${details.prepared ?? "none"}\nPrevious: ${details.previous ?? "none"}`,
+      detail: "Updates keep a program backup and a data snapshot. Rollback restores only the program, not older chats or keys.",
+      buttons: ["Check for updates", "Install prepared update", "Roll back", "Open backups", "Cancel"], defaultId: 4, cancelId: 4 });
+    if (answer.response === 0) await updaterCoordinator.check(true);
+    if (answer.response === 1) await updaterCoordinator.install();
+    if (answer.response === 2) {
+      const confirmation = await ask({ type: "question", title: "Roll back TopBot",
+        message: `Restore ${details.previous ?? "previous version"}?`, detail: "TopBot will restart. Current conversations and keys will be retained.",
+        buttons: ["Cancel", "Roll back"], defaultId: 0, cancelId: 0 });
+      if (confirmation.response === 1) await updaterCoordinator.rollback();
+    }
+    if (answer.response === 3) await shell.openPath(details.root);
+  } catch (error) { await ask({ type: "error", title: "TopBot update", message: error.message }); }
 }

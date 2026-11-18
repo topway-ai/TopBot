@@ -130,14 +130,14 @@ afterEach(() => {
   rmSync(fixture.home, { recursive: true, force: true });
 });
 
-function bridgeFor(origin, { clicked = false, rule = null } = {}) {
+function bridgeFor(origin, { clicked = false, rule = null, platform = "darwin" } = {}) {
   let bridge;
   const invoked = [];
   const asked = [];
   const loading = page(origin);
   if (rule) rule.window.webContents = loading.webContents;
   vm.runInNewContext(readFileSync(new URL("./preload.cjs", import.meta.url), "utf8"), {
-    process: { platform: "darwin", argv: [`--omb-local-origin=${LOCAL}`] },
+    process: { platform, argv: [`--omb-local-origin=${LOCAL}`] },
     location: { origin }, navigator: { userActivation: { isActive: clicked } },
     TextEncoder, localStorage: { getItem: () => null },
     require: () => ({
@@ -152,6 +152,17 @@ function bridgeFor(origin, { clicked = false, rule = null } = {}) {
   });
   return { bridge, invoked, asked };
 }
+
+it("limits the native quit and recovery menu to an active user on the local Windows page", async () => {
+  expect(bridgeFor(LOCAL).bridge.desktopMenu).toBeUndefined();
+  expect(bridgeFor(OTHER, { platform: "win32", clicked: true }).bridge.desktopMenu).toBeUndefined();
+  for (const clicked of [false, true]) {
+    const local = bridgeFor(LOCAL, { platform: "win32", clicked });
+    await local.bridge.desktopMenu.recovery();
+    await local.bridge.desktopMenu.quit();
+    expect(local.invoked).toEqual(clicked ? [["desktop-menu:recovery"], ["desktop-menu:quit"]] : []);
+  }
+});
 
 it("My Cloud's page gets the update bridge, and it restarts the app only on the person's click", async () => {
   const local = bridgeFor(LOCAL);

@@ -86,6 +86,19 @@ export function createMoveFreeze({ dataDir, exportOnly = false }: { dataDir: str
       try { work[step](); } catch (error) { console.warn(`move freeze: could not ${step} a schedule (${(error as Error).message})`); }
     }
   };
+  let temporaryTimer: ReturnType<typeof setTimeout> | undefined;
+  const unfreeze = (): boolean => {
+    if (exportOnly) return false;
+    if (temporaryTimer) clearTimeout(temporaryTimer);
+    temporaryTimer = undefined;
+    if (!frozen) return true;
+    rmSync(file, { force: true });
+    frozen = false;
+    movedTo = null;
+    place = null;
+    each("start");
+    return true;
+  };
 
   return {
     frozen: () => frozen,
@@ -117,13 +130,15 @@ export function createMoveFreeze({ dataDir, exportOnly = false }: { dataDir: str
       if (frozen && !exportOnly && method.toUpperCase() === "POST" && path === "/api/desktop/shared-computer-control") return null;
       return frozen && !READS.has(method.toUpperCase()) && !STILL_CHANGES.test(path) ? refusal() : null;
     },
-    freeze(cloud: string | null, named: string | null = null): void {
+    freeze(cloud: string | null, named: string | null = null, temporary = false): void {
       if (frozen) return;
-      writeFileAtomic(file, JSON.stringify({ v: 1, at: Date.now(), ...(cloud ? { cloud } : {}), ...(named ? { place: named } : {}) }), { mode: 0o600 });
+      if (!temporary) writeFileAtomic(file, JSON.stringify({ v: 1, at: Date.now(), ...(cloud ? { cloud } : {}), ...(named ? { place: named } : {}) }), { mode: 0o600 });
       frozen = true;
       movedTo = cloud;
       place = named;
       each("stop");
+      // An updater whose request or handoff is lost must not leave this server paused.
+      if (temporary) { temporaryTimer = setTimeout(unfreeze, 30_000); temporaryTimer.unref(); }
     },
     /** Deletes this computer's copy of the workspace, credentials included, once the move is long done; only a computer
      * frozen by a move ever does. The server starts again after, frozen and empty. */
@@ -135,15 +150,6 @@ export function createMoveFreeze({ dataDir, exportOnly = false }: { dataDir: str
     /** False for a server that may never be lifted: a Cloud that ended. */
     lifts: () => !exportOnly,
     /** False when this server may never be lifted: a Cloud that ended. */
-    unfreeze(): boolean {
-      if (exportOnly) return false;
-      if (!frozen) return true;
-      rmSync(file, { force: true });
-      frozen = false;
-      movedTo = null;
-      place = null;
-      each("start");
-      return true;
-    },
+    unfreeze,
   };
 }
