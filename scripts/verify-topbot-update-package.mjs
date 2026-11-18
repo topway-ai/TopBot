@@ -8,6 +8,7 @@ import os from "node:os";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { checkManifest, MANIFEST_NAME } from "../electron/topbot-release.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packaged = path.resolve(process.argv[2] || path.join(root, "release", "win-unpacked"));
@@ -34,13 +35,25 @@ console.log(JSON.stringify({ base, installDir, packaged, updates }));
 await cp(previous, installDir, { recursive: true, dereference: false });
 await cp(path.join(root, "electron", "topbot-update-runner.ps1"), path.join(job, "runner.ps1"));
 const zip = path.join(job, "update.zip");
-await promisify(execFile)(ps, ["-NoProfile", "-NonInteractive", "-File", path.join(root, "electron", "fixtures", "topbot-update-fixture.ps1"),
-  "-Mode", "ZipFast", "-Source", packaged, "-Destination", zip], { windowsHide: true, timeout: 240000 });
+const releaseManifest = process.argv.includes("--release-archive")
+  ? checkManifest(JSON.parse(await readFile(path.join(path.dirname(packaged), MANIFEST_NAME), "utf8"))) : null;
+if (releaseManifest) {
+  assert.equal(releaseManifest.version, build.version);
+  await cp(path.join(path.dirname(packaged), `TopBot-${releaseManifest.version}-x64.zip`), zip);
+} else {
+  await promisify(execFile)(ps, ["-NoProfile", "-NonInteractive", "-File", path.join(root, "electron", "fixtures", "topbot-update-fixture.ps1"),
+    "-Mode", "ZipFast", "-Source", packaged, "-Destination", zip], { windowsHide: true, timeout: 240000 });
+}
 const digest = createHash("sha256");
 for await (const chunk of createReadStream(zip)) digest.update(chunk);
 const size = (await stat(zip)).size;
+const sha256 = digest.digest("hex");
+if (releaseManifest) {
+  assert.equal(size, releaseManifest.bytes);
+  assert.equal(sha256, releaseManifest.sha256);
+}
 const plan = { schema: 1, version: build.version, previousVersion, dataEpoch: 1,
-  bytes: size, unpackedBytes: size + 16 * 1024 ** 2, sha256: digest.digest("hex"), installDir, profileDir: profile,
+  bytes: size, unpackedBytes: releaseManifest?.unpackedBytes ?? size + 16 * 1024 ** 2, sha256, installDir, profileDir: profile,
   dataDirs: [data, profile], token: randomBytes(32).toString("hex") };
 await writeFile(path.join(job, "plan.json"), JSON.stringify(plan));
 const json = file => readFile(file, "utf8").then(JSON.parse);
@@ -71,6 +84,10 @@ async function run(mode) {
 }
 try {
   assert.equal((await run("Prepare")).phase, "prepared");
+  if (process.argv.includes("--hidden-candidate")) {
+    await writeFile(path.join(profile, "update-when-quiet.json"), JSON.stringify({ v: 1, from: previousVersion, to: build.version,
+      tries: 1, at: Date.now(), window: false }));
+  }
   assert.equal((await run("Apply")).phase, "committed");
   const health = await json(path.join(job, "health.json"));
   assert.equal(health.ready, true); assert.equal(health.version, build.version);

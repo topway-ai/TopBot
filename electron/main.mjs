@@ -13,9 +13,8 @@ import { installTalk, isTalkPanel } from "./talk-main.mjs";
 import { openBlankTerminal } from "./terminal-launch.mjs";
 import { linuxDisablesGpu, SOFTWARE_RENDERING_ARG } from "./linux-gpu.mjs";
 import { pasteMenuItem } from "./paste-menu-item.mjs";
-import { attachUpdaterWindow, startUpdater, registerUpdaterIpc, sendUpdaterState, reopenedOutOfSight, quietSignals, showManagedUpdates } from "./updater.mjs";
-import { startUpdateHealth } from "./topbot-update-health.mjs";
-import { updateRoot } from "./topbot-managed-update.mjs";
+import { attachUpdaterWindow, registerUpdaterIpc, sendUpdaterState, reopenedOutOfSight, quietSignals, showManagedUpdates } from "./updater.mjs";
+import { registerManagedDesktopMenu, startDesktopHidden, startManagedDesktopUpdates } from "./managed-desktop-updates.mjs";
 import {
   appendDesktopCrashRecord,
   buildDiagnosticsReport,
@@ -2434,18 +2433,7 @@ function relaunchAfterDesktopRemoteChange() {
   timer.unref?.();
 }
 
-if (process.platform === "win32") {
-  ipcMain.handle("desktop-menu:recovery", localOnly("desktop-menu:recovery", async event => {
-    requireMainWindowSender(event);
-    await showManagedUpdates({ dialog, shell, parent: mainWindow });
-  }));
-  ipcMain.handle("desktop-menu:quit", localOnly("desktop-menu:quit", async event => {
-    requireMainWindowSender(event);
-    const choice = await dialog.showMessageBox(mainWindow, { type: "question", message: nativeT("native.menu.quitFully") + "?",
-      buttons: [nativeT("native.common.cancel"), nativeT("native.menu.quitFully")], defaultId: 0, cancelId: 0, noLink: true });
-    if (choice.response === 1) app.quit();
-  }));
-}
+registerManagedDesktopMenu({ ipcMain, localOnly, requireMainWindowSender, window: () => mainWindow, dialog, shell, t: nativeT, quit: () => app.quit() });
 
 ipcMain.handle("desktop-remote:state", () => publicDesktopRemoteState());
 ipcMain.handle("desktop-remote:pair", localOnly("desktop-remote:pair", async (event, endpoint, code) => {
@@ -2837,7 +2825,7 @@ app.whenReady().then(async () => {
       slog(`system tray unavailable: ${error?.message ?? error}`);
     }
   }
-  hiddenStart = loginItem.startedHidden() || reopenedOutOfSight();
+  hiddenStart = startDesktopHidden({ app, startedHidden: () => loginItem.startedHidden(), reopenedOutOfSight });
   startupScreen = hiddenStart ? null : createStartupScreen({
     BrowserWindow, iconPath: APP_ICON, isQuitting: () => desktopShutdownStarted, t: nativeT, lang: nativeText.intlTag(),
     onQuit: () => app.quit(),
@@ -3079,26 +3067,10 @@ app.whenReady().then(async () => {
     slog("skipping connected-apps registration: the credential store was unreadable this launch");
   }
   checkInManagedComposio();
-  startUpdater(quietSignals({ powerMonitor, window: () => mainWindow, lastInput: oneHome.lastInput, local: localServerRequest, place: () => homeWindow.placeOrigin(), cloudFetch: (...args) => session.defaultSession.fetch(...args), asleep: origin => homeWindow.asleepAt(origin), busy: () => ((oneHome.oneHome.busy() || ownHome?.busy()) && "move") || (computerSharing?.busy() && "lending") || (talk.busy() && "talk") || (companyBackupController || companyRestoreCommitting ? "backup" : null) }), {
-    installDir: path.dirname(process.execPath), profileDir: app.getPath("userData"), dataDirs: [desktopDataDir(), ...(runningDataDir ? [runningDataDir] : []), app.getPath("userData")],
-    canUpdate: () => !powerMonitor.isOnBatteryPower(),
-    quit: () => { releaseSingleInstanceLock(app); app.quit(); },
-    freeze: async () => {
-      const before = await (await localServerRequest("/api/move/freeze", { signal: AbortSignal.timeout(10000) })).json();
-      if (before.frozen) throw new Error("This workspace is already frozen for another operation.");
-      const response = await localServerRequest("/api/move/freeze", { method: "POST", signal: AbortSignal.timeout(10000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ temporary: true }) });
-      if (!response.ok) throw new Error("TopBot is still busy; update postponed.");
-    },
-    thaw: async () => { await localServerRequest("/api/move/freeze", { method: "DELETE", signal: AbortSignal.timeout(5000), headers: { "Content-Type": "application/json" }, body: "{}" }); },
+  startManagedDesktopUpdates(quietSignals({ powerMonitor, window: () => mainWindow, lastInput: oneHome.lastInput, local: localServerRequest, place: () => homeWindow.placeOrigin(), cloudFetch: (...args) => session.defaultSession.fetch(...args), asleep: origin => homeWindow.asleepAt(origin), busy: () => ((oneHome.oneHome.busy() || ownHome?.busy()) && "move") || (computerSharing?.busy() && "lending") || (talk.busy() && "talk") || (companyBackupController || companyRestoreCommitting ? "backup" : null) }), {
+    app, powerMonitor, workspaceDirs: [desktopDataDir(), ...(runningDataDir ? [runningDataDir] : [])], local: localServerRequest,
+    isServerReady: () => serverReady, window: () => mainWindow, rendererOrigin, log: slog,
   });
-  if (app.isPackaged && process.platform === "win32") void startUpdateHealth({
-    root: updateRoot(), version: app.getVersion(), quit: () => app.quit(),
-    ready: async () => {
-      if (!serverReady || !mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isLoadingMainFrame() || mainWindow.webContents.isCrashed()) return false;
-      const response = await localServerRequest("/api/health", { signal: AbortSignal.timeout(5000) });
-      return response.ok && new URL(mainWindow.webContents.getURL()).origin === rendererOrigin();
-    },
-  }).catch(error => slog(`update health: ${error.message}`));
   refreshApplicationMenu();
   openWindowForLink = () => {
     if (!mainWindow || mainWindow.isDestroyed()) createWindow({ deferNavigation: homeWindow.current().kind !== "computer" });

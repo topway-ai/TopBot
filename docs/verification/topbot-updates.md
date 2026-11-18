@@ -35,6 +35,8 @@ depends on the GitHub repository and TLS, not an independent signing key.
 7. Start the new executable with the same profile and a one-time health ticket.
    Require the expected PID/version/epoch, live desktop renderer and local
    server for 30 continuous seconds within a 180-second deadline.
+   The candidate opens the desktop to validate the renderer even if the
+   previous window was closed to the tray when the update started.
 8. On failure, request the candidate's normal shutdown, stop only candidate
    installation processes if necessary, restore the previous program and
    restart it. Block the failed release from automatic retries.

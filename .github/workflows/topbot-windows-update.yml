@@ -28,16 +28,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Transaction and failure tests
         run: node --test --test-concurrency=1 electron/topbot-update.node-test.mjs electron/updater-coordinator.node-test.mjs electron/update-when-quiet.node-test.mjs electron/startup-tray.node-test.mjs
-      - name: Task pause regression
-        run: pnpm exec vitest run server/move-freeze.test.ts server/move-freeze-thaw.test.ts --maxWorkers=1
+      - name: Desktop menu, task pause and source size regression
+        run: pnpm exec vitest run electron/managed-desktop-updates.test.mjs electron/updater.test.mjs server/move-freeze.test.ts server/move-freeze-thaw.test.ts scripts/testing/file-size-ratchet.test.ts --maxWorkers=1 --testTimeout=120000
       - run: pnpm package:win
       - name: Packaged server smoke test
         env:
           OMB_SMOKE_DIST: ${{ github.workspace }}/release/win-unpacked/resources/server
         run: node scripts/smoke-packaged-server.mjs
-      - name: Packaged update startup and backup qualification
-        run: node scripts/verify-topbot-update-package.mjs release/win-unpacked release/win-unpacked
       - run: node scripts/topbot-update-manifest.mjs
+      - name: Qualify the release archive and hidden-window restart
+        run: node scripts/verify-topbot-update-package.mjs release/win-unpacked release/win-unpacked --release-archive --hidden-candidate
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: topbot-windows-update
