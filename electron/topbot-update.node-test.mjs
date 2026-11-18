@@ -3,7 +3,7 @@ import test from "node:test";
 import { createHash, randomBytes } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir, mkdtemp, writeFile, readFile, copyFile, rm, stat, rename, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile, readFile, copyFile, rm, stat, rename, symlink, realpath } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,8 @@ import { createManagedUpdater } from "./topbot-managed-update.mjs";
 
 const run = promisify(execFile);
 const windows = process.platform === "win32";
+// Windows hosted runners may expose TEMP through its 8.3 alias.
+const temp = await realpath(os.tmpdir());
 const ps = "pwsh.exe";
 const runner = fileURLToPath(new URL("./topbot-update-runner.ps1", import.meta.url));
 const maker = fileURLToPath(new URL("./fixtures/topbot-update-fixture.ps1", import.meta.url));
@@ -24,7 +26,7 @@ const json = file => readFile(file, "utf8").then(JSON.parse);
 const command = (file, args, options = {}) => run(ps, ["-NoProfile", "-NonInteractive", "-File", file, ...args], { windowsHide: true, timeout: 90000, ...options });
 
 test("managed updates serialize checks and do not quit when busy or the helper fails", async t => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "topbot-managed-"));
+  const root = await mkdtemp(path.join(temp, "topbot-managed-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   let finds = 0, freezes = 0, thaws = 0, quits = 0, busy = false, failHelper = false;
   const states = [];
@@ -69,7 +71,7 @@ test("release selection rejects drafts and never uses a foreign manifest", async
 });
 
 test("health receipts require an owned ticket and matching executable", async t => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "topbot-health-"));
+  const root = await mkdtemp(path.join(temp, "topbot-health-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const job = path.join(root, "transactions", "test"); await mkdir(job, { recursive: true });
   const file = path.join(job, "ticket.json"), token = "a".repeat(64), installDir = path.join(root, "app");
@@ -89,7 +91,7 @@ test("health receipts require an owned ticket and matching executable", async t 
 });
 
 test("Windows independent helper: upgrade, snapshot, rollback and injected failures", { skip: !windows, timeout: 240000 }, async t => {
-  const base = await mkdtemp(path.join(os.tmpdir(), "topbot-updater-test-"));
+  const base = await mkdtemp(path.join(temp, "topbot-updater-test-"));
   t.after(() => rm(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }));
   const binary = path.join(base, "fixture.exe");
   await command(maker, ["-Mode", "Compile", "-Destination", binary]);

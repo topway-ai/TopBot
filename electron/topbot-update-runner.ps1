@@ -84,14 +84,15 @@ function Assert-Plan {
   if ([IO.Path]::GetFileName($Plan.installDir) -ne 'TopBot' -or $Plan.installDir.StartsWith($Root, [StringComparison]::OrdinalIgnoreCase) -or
       $Root.StartsWith($Plan.installDir, [StringComparison]::OrdinalIgnoreCase) -or
       [IO.Path]::GetPathRoot($Root) -ne [IO.Path]::GetPathRoot($Plan.installDir)) { throw 'Invalid or cross-volume install target.' }
-  foreach ($Source in $Plan.dataDirs) {
+  $Plan.dataDirs = @(foreach ($Source in $Plan.dataDirs) {
     $Full = Assert-Tree $Source
     if ($Full.Length -lt 10 -or $Root.StartsWith($Full, [StringComparison]::OrdinalIgnoreCase) -or
         $Full.StartsWith($Root, [StringComparison]::OrdinalIgnoreCase) -or
         $Full.StartsWith($Plan.installDir, [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid data snapshot path.' }
-  }
-  $Profile = Assert-Tree $Plan.profileDir
-  if (-not (@($Plan.dataDirs | Where-Object { $Profile -eq $_ -or $Profile.StartsWith($_ + '\', [StringComparison]::OrdinalIgnoreCase) }).Count)) { throw 'Desktop profile is outside the snapshot sources.' }
+    $Full
+  })
+  $Plan.profileDir = Assert-Tree $Plan.profileDir
+  if (-not (@($Plan.dataDirs | Where-Object { $Plan.profileDir -eq $_ -or $Plan.profileDir.StartsWith($_ + '\', [StringComparison]::OrdinalIgnoreCase) }).Count)) { throw 'Desktop profile is outside the snapshot sources.' }
   return $Plan
 }
 function Prepare {
