@@ -7323,5 +7323,7 @@
   "composer.command.burstDesc": "Запускает много частей задачи сразу и объединяет результаты",
   "devices.computers.pairButton": "Подключить компьютер",
   "devices.computers.pairTitle": "Подключить другой компьютер",
-  "devices.computers.typeCode": "На другом компьютере откройте «Подключиться к серверу» в {app} и введите этот код."
+  "devices.computers.typeCode": "На другом компьютере откройте «Подключиться к серверу» в {app} и введите этот код.",
+  "native.menu.recovery": "Обновления и восстановление",
+  "native.menu.quitFully": "Полностью закрыть TopBot"
 }

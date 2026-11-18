@@ -4082,5 +4082,7 @@
   "composer.command.burstDesc": "Запустити багато частин роботи одночасно, а потім об'єднати результати",
   "devices.computers.pairButton": "Підключити комп’ютер",
   "devices.computers.pairTitle": "Підключити інший комп’ютер",
-  "devices.computers.typeCode": "На іншому комп’ютері відкрийте «Підключитися до сервера» в {app} і введіть цей код."
+  "devices.computers.typeCode": "На іншому комп’ютері відкрийте «Підключитися до сервера» в {app} і введіть цей код.",
+  "native.menu.recovery": "Оновлення та відновлення",
+  "native.menu.quitFully": "Повністю закрити TopBot"
 }

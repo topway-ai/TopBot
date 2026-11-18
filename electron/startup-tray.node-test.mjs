@@ -140,7 +140,7 @@ test("closing during startup keeps the eventual workspace hidden until tray rest
 
 test("the tray's menu and the startup screen speak the app's language, and the tray says it again when it changes", () => {
   const text = nativeText.createNativeText({ saved: "en" });
-  let trayInstance;
+  let trayInstance, updates = 0;
   class Tray extends EventEmitter {
     constructor() { super(); trayInstance = this; }
     setToolTip(value) { this.tooltip = value; }
@@ -148,11 +148,13 @@ test("the tray's menu and the startup screen speak the app's language, and the t
     isDestroyed() { return false; }
   }
   const tray = createSystemTray({ Tray, Menu: { buildFromTemplate: value => value }, nativeImage: { createFromPath: () => ({ resize: () => ({}) }) },
-    iconPath, getWindow: () => null, onQuit: () => {}, t: text.t });
-  assert.deepEqual(trayInstance.menu.map(item => item.label), ["Open TopBot", undefined, "Quit TopBot"]);
+    iconPath, getWindow: () => null, onQuit: () => {}, onUpdates: () => { updates += 1; }, t: text.t });
+  assert.deepEqual(trayInstance.menu.map(item => item.label), ["Open TopBot", "Updates and recovery", undefined, "Quit TopBot"]);
   text.set("pt-br");
   tray.relabel();
-  assert.deepEqual(trayInstance.menu.map(item => item.label), ["Abrir o TopBot", undefined, "Sair do TopBot"]);
+  assert.deepEqual(trayInstance.menu.map(item => item.label), ["Abrir o TopBot", "Atualizações e recuperação", undefined, "Sair do TopBot"]);
+  trayInstance.menu[1].click();
+  assert.equal(updates, 1);
   assert.equal(trayInstance.tooltip, "TopBot");
   const html = startupScreenHtml(iconPath, { t: text.t, lang: text.intlTag() });
   assert.match(html, /<html lang="pt-BR">/);

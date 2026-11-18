@@ -6009,5 +6009,7 @@
   "composer.command.burstDesc": "Chạy nhiều phần của một công việc cùng lúc, rồi gộp kết quả",
   "devices.computers.pairButton": "Ghép nối máy tính",
   "devices.computers.pairTitle": "Ghép nối máy tính khác",
-  "devices.computers.typeCode": "Trên máy tính kia, mở Kết nối với máy chủ trong {app} và nhập mã này."
+  "devices.computers.typeCode": "Trên máy tính kia, mở Kết nối với máy chủ trong {app} và nhập mã này.",
+  "native.menu.recovery": "Cập nhật và khôi phục",
+  "native.menu.quitFully": "Thoát hẳn TopBot"
 }

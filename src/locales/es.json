@@ -6505,5 +6505,7 @@
   "composer.command.burstDesc": "Ejecutar muchas partes de un trabajo a la vez y luego unir los resultados",
   "devices.computers.pairButton": "Vincular un ordenador",
   "devices.computers.pairTitle": "Vincular otro ordenador",
-  "devices.computers.typeCode": "En tu otro ordenador, abre Conectar a un servidor en {app} y escribe este código."
+  "devices.computers.typeCode": "En tu otro ordenador, abre Conectar a un servidor en {app} y escribe este código.",
+  "native.menu.recovery": "Actualizaciones y recuperación",
+  "native.menu.quitFully": "Cerrar TopBot por completo"
 }

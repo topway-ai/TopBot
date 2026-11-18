@@ -10910,5 +10910,7 @@
   "settings.browser.proxyConfigured": "As novas conexões do navegador integrado usam este proxy SOCKS5. O Meu Chrome mantém as próprias configurações; destinos privados e locais continuam protegidos.",
   "settings.browser.proxyInactive": "Salvo, mas só funciona com o navegador integrado em hosts compatíveis.",
   "settings.browser.proxySave": "Salvar",
-  "settings.browser.proxyClear": "Remover"
+  "settings.browser.proxyClear": "Remover",
+  "native.menu.recovery": "Atualizações e recuperação",
+  "native.menu.quitFully": "Sair completamente do TopBot"
 }

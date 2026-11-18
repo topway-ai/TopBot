@@ -3991,5 +3991,7 @@
   "composer.command.burstDesc": "Viele Teile einer Aufgabe gleichzeitig ausführen und die Ergebnisse zusammenführen",
   "devices.computers.pairButton": "Computer koppeln",
   "devices.computers.pairTitle": "Anderen Computer koppeln",
-  "devices.computers.typeCode": "Öffne auf deinem anderen Computer in {app} „Mit einem Server verbinden“ und gib diesen Code ein."
+  "devices.computers.typeCode": "Öffne auf deinem anderen Computer in {app} „Mit einem Server verbinden“ und gib diesen Code ein.",
+  "native.menu.recovery": "Updates und Wiederherstellung",
+  "native.menu.quitFully": "TopBot vollständig beenden"
 }

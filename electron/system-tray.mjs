@@ -17,7 +17,7 @@ export function createSystemTray({ Tray, Menu, nativeImage, iconPath, getWindow,
   };
   const label = () => tray.setContextMenu(Menu.buildFromTemplate([
     { label: t("native.tray.open"), click: show },
-    ...(onUpdates ? [{ label: "Updates and recovery...", click: onUpdates }] : []),
+    ...(onUpdates ? [{ label: t("native.menu.recovery"), click: onUpdates }] : []),
     { type: "separator" },
     { label: t("native.tray.quit"), click: onQuit },
   ]));

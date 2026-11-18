@@ -8100,5 +8100,7 @@
   "composer.command.burstDesc": "作業の多くの部分を同時に実行し、結果をまとめます",
   "devices.computers.pairButton": "コンピュータをペアリング",
   "devices.computers.pairTitle": "別のコンピュータをペアリング",
-  "devices.computers.typeCode": "もう一台のコンピュータで {app} の「サーバーに接続」を開き、このコードを入力してください。"
+  "devices.computers.typeCode": "もう一台のコンピュータで {app} の「サーバーに接続」を開き、このコードを入力してください。",
+  "native.menu.recovery": "更新と復元",
+  "native.menu.quitFully": "TopBot を完全に終了"
 }

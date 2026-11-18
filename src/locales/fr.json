@@ -3807,5 +3807,7 @@
   "composer.command.burstDesc": "Lancer plusieurs parties d'un travail en même temps, puis fusionner les résultats",
   "devices.computers.pairButton": "Associer un ordinateur",
   "devices.computers.pairTitle": "Associer un autre ordinateur",
-  "devices.computers.typeCode": "Sur votre autre ordinateur, ouvrez Se connecter à un serveur dans {app} et saisissez ce code."
+  "devices.computers.typeCode": "Sur votre autre ordinateur, ouvrez Se connecter à un serveur dans {app} et saisissez ce code.",
+  "native.menu.recovery": "Mises à jour et récupération",
+  "native.menu.quitFully": "Quitter complètement TopBot"
 }

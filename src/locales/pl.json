@@ -7270,5 +7270,7 @@
   "composer.command.burstDesc": "Uruchom wiele części zadania naraz, a potem połącz wyniki",
   "devices.computers.pairButton": "Sparuj komputer",
   "devices.computers.pairTitle": "Sparuj inny komputer",
-  "devices.computers.typeCode": "Na drugim komputerze otwórz Połącz z serwerem w {app} i wpisz ten kod."
+  "devices.computers.typeCode": "Na drugim komputerze otwórz Połącz z serwerem w {app} i wpisz ten kod.",
+  "native.menu.recovery": "Aktualizacje i odzyskiwanie",
+  "native.menu.quitFully": "Zakończ działanie TopBot"
 }
