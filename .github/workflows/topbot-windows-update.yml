@@ -29,7 +29,7 @@ jobs:
       - name: Transaction and failure tests
         run: node --test --test-concurrency=1 electron/topbot-update.node-test.mjs electron/updater-coordinator.node-test.mjs electron/update-when-quiet.node-test.mjs electron/startup-tray.node-test.mjs
       - name: Desktop menu, task pause and source size regression
-        run: pnpm exec vitest run electron/managed-desktop-updates.test.mjs electron/updater.test.mjs server/move-freeze.test.ts server/move-freeze-thaw.test.ts scripts/testing/file-size-ratchet.test.ts --maxWorkers=1 --testTimeout=120000
+        run: pnpm exec vitest run electron/managed-desktop-updates.test.mjs electron/updater.test.mjs server/move-freeze.test.ts server/move-freeze-thaw.test.ts scripts/testing/file-size-ratchet.test.ts scripts/patch-appimage-updater.test.mjs --maxWorkers=1 --testTimeout=120000
       - run: pnpm package:win
       - name: Packaged server smoke test
         env:
