@@ -12,7 +12,7 @@ const sha = /^[a-f0-9]{40}$/;
 const slug = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const protectedPath = /^(?:\.github\/|AGENTS\.md$|electron\/|scripts\/(?:topbot-|close-legacy-|install-|package-|verify-topbot-)|skills\/topbot-development\/|server\/(?:request-auth|permissions|.*migration|sessions|config|harness\/registry|move-freeze))/i;
 const privatePath = /(?:^|\/)(?:\.env(?:\.|$)|\.openmausbot(?:\/|$)|\.omb-scratch(?:\/|$)|node_modules\/|dist(?:-[^/]+)?\/|release\/|performance-results\/|credentials?(?:\.|\/)|secrets?(?:\.|\/))|\.(?:key|pem|pfx|sqlite3?|db|gguf|log|zip|exe)$/i;
-const allowedSource = /\.(?:[cm]?[jt]sx?|ya?ml|json|mdx?|css|html?|svg|toml|lock|txt|ps1|sh|cjs|mjs)$/i;
+const allowedSource = /\.(?:[cm]?[jt]sx?|ya?ml|json|mdx?|css|html?|svg|toml|lock|txt|cmd|ps1|sh)$/i;
 const secret = /(?:gh[pousr]_[a-zA-Z0-9]{30,}|github_pat_[a-zA-Z0-9_]{35,}|sk-(?:proj-)?[a-zA-Z0-9_-]{40,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----)/;
 const privateReference = /(?:[A-Z]:\\(?:Users|ProgramData)\\|\/home\/[^/\s]+\/\.openmausbot\/)/i;
 

@@ -95,9 +95,9 @@ test("fails closed for low resources, hostile slugs, private files and unsupport
 
 test("identifies release-owner review paths and rejects likely keys and local profiles", async t => {
   const f = fixture(t);
-  const files = [".github/workflows/release.yml","electron/topbot-release.mjs","docs/report.md","../escape.md"];
+  const files = [".github/workflows/release.yml","electron/topbot-release.mjs","scripts/topbot-development.cmd","docs/report.md","../escape.md"];
   const result = analyzeFiles(f.checkout, files, `+apiKey: ${"ghp_" + "x".repeat(40)}`);
-  assert.deepEqual(result.ownerReview, files.slice(0,2));
+  assert.deepEqual(result.ownerReview, files.slice(0,3));
   assert.equal(result.blocked.length, 2);
   assert.equal(result.blocked[0].file, "../escape.md");
 });
