@@ -40,6 +40,7 @@ import { startFresh } from "../fresh-start.ts";
 import { parseMentionPicks } from "../../shared/room-mentions.ts";
 import { pinnedClientThreadGuard } from "./pinned-client-thread.ts";
 import { refusalBody, userError } from "../user-errors.ts";
+import { chatReleaseCommand, type ChatReleaseHandler } from "../topbot-chat-release.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 type RunningInstance = ReturnType<ProviderRegistry["get"]>;
@@ -69,6 +70,7 @@ export interface BotMessageRouteDeps {
   groupSpeakers: ReadonlyMap<string, { botId: string }>;
   desktopManaged: boolean;
   cloudHome: boolean;
+  topBotChatRelease?: ChatReleaseHandler;
   DirectSendRefused: abstract new (...args: never[]) => { readonly status: number; readonly body: Record<string, unknown> };
   acceptDirectSend(input: DirectSendInput, guardedStart?: (currentAtStart: BotRecord) => Promise<DirectSendReceipt>): Promise<DirectSendReceipt>;
   directSendRefusal(botId: string, threadId: string): { status: number; body: Record<string, unknown> } | null;
@@ -237,6 +239,22 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       if ((pressed || fromAnApp) && store.groupByThread(threadId)) return json(res, 409, { error: ROOM_VIEW_ONLY });
       const notYours = cloudGuestSendRefusal(auth, threadId);
       if (notYours) return json(res, 403, { error: notYours });
+      const release = chatReleaseCommand(typed);
+      if (release) {
+        if (!deps.topBotChatRelease || auth.kind !== "loopback" || !auth.desktopOwner || fromPhone(auth) || guarded || body.mode === "goal" ||
+            body.replyToId || pointing || pageOpen || followUp || mentions?.length || body.dataContext || store.groupByThread(threadId)) {
+          return json(res, 403, { error: "Release commands require a direct message from the local Windows TopBot desktop." });
+        }
+        if (!store.taskByThread(bot.id, threadId)) return json(res, 404, userError("serverError.chat.missingConversation"));
+        const sendId = parseSendId(body.sendId);
+        const cached = sendId ? acceptedSendMatch(store.messagesFor(threadId), sendId, typed, undefined) : null;
+        if (cached?.kind === "conflict") return json(res, 409, { error: "sendId already belongs to another message" });
+        if (cached?.kind === "match") return json(res, 202, { ok: true, threadId, message: cached.message });
+        const message = store.appendMessage(threadId, { role: "user", kind: "text", text: typed, sendId, sender: messageSender(auth) });
+        const report = await deps.topBotChatRelease(threadId, release);
+        if (store.taskByThread(bot.id, threadId)) store.appendMessage(threadId, { role: "bot", kind: "text", text: report });
+        return json(res, 202, { ok: true, threadId, message });
+      }
       if (body.mode !== undefined && body.mode !== "chat" && body.mode !== "goal") return json(res, 400, { error: "mode must be chat or goal" });
       if (body.mode === "goal") {
         if (guarded || pressed || fromAnApp || pointing) return json(res, 400, { error: "a goal is a plain typed message" });

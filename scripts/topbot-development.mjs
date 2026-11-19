@@ -42,7 +42,7 @@ function samePath(a, b) {
 export function analyzeFiles(worktree, files, addedLines = "") {
   const blocked = [], ownerReview = [];
   for (const file of files) {
-    if (privatePath.test(file) || !allowedSource.test(file) || /[\x00-\x1f\x7f]/.test(file)) {
+    if (privatePath.test(file) || !allowedSource.test(file) || [...file].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
       blocked.push({ file, reason: "Outside the text source allowlist" });
       continue;
     }

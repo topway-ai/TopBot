@@ -33,9 +33,11 @@ release. Keep the user's current app, profiles, keys and chats out of developmen
    and opens or verifies a GitHub draft against `main`. Report the URL, exact
    commit, passed checks, and any protected paths. If authorization fails,
    report it; do not request tokens in chat or fall back to a wider credential.
-6. Stop at the draft. Never merge, tag, publish, touch the main branch from the
-   job, dispatch a production workflow, change approval settings, or overwrite
-   the live app. After review the owner can approve the exact merged commit for
-   the separate GitHub Windows release workflow. A reply in chat records intent
-   but is not a GitHub authorization. When done, `finish` archives the record,
-   without deleting the worktree or branch.
+6. Stop at the draft. Never merge, tag, publish, touch main from the job,
+   dispatch a production workflow, change approvals, or overwrite the live app.
+   For docs, styles or translations prepared for a release, bump only the
+   package version above installed and main versions and tell the owner to send
+   `/topbot-release PR_NUMBER` in the Windows desktop chat after CI passes.
+   Only the owner may send the one-time confirmation shown by the application.
+   All other changes require independent review and a separate release operator.
+   When done, `finish` archives the record without deleting the worktree or branch.

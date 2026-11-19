@@ -1,4 +1,5 @@
 name: TopBot Windows Update
+run-name: TopBot Windows Update (${{ inputs.publish && 'publish' || 'preview' }}) ${{ github.sha }}
 on:
   workflow_dispatch:
     inputs:
@@ -34,6 +35,8 @@ jobs:
             throw 'Publish requires the repository owner to dispatch the exact reviewed main commit.'
           }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -44,6 +47,8 @@ jobs:
         run: node --test --test-concurrency=1 electron/topbot-update.node-test.mjs electron/updater-coordinator.node-test.mjs electron/update-when-quiet.node-test.mjs electron/startup-tray.node-test.mjs
       - name: Desktop menu, task pause and source size regression
         run: pnpm exec vitest run electron/managed-desktop-updates.test.mjs electron/updater.test.mjs server/move-freeze.test.ts server/move-freeze-thaw.test.ts scripts/testing/file-size-ratchet.test.ts scripts/patch-appimage-updater.test.mjs --maxWorkers=1 --testTimeout=120000
+      - name: Verify chat release approvals and desktop authentication
+        run: pnpm exec vitest run server/topbot-chat-release.test.ts server/routes/bot-messages.test.ts server/request-auth.test.ts --maxWorkers=1
       - run: pnpm package:win
       - name: Packaged server smoke test
         env:

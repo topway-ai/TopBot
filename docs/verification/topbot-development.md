@@ -31,17 +31,38 @@ a sandbox for a bot granted unrestricted shell or browser access. Enforce
 repository permissions and protected paths separately; never give the routine
 development bot unrestricted owner credentials or automatic approval.
 
-## Release
+## Release From Chat
 
-Keep the PR as a draft until its tests and diff have been reviewed. Changes to
-release workflows, the updater, permission boundaries, or data migrations
-need an independent maintainer review. After merging, confirm the exact
-`main` SHA and a version higher than the installed app. The repository owner
-can dispatch **TopBot Windows Update** on `main` with `publish: true` and that
-SHA as `reviewed_sha`. A preview uses `publish: false`. Chat approval records
-intent; GitHub still authenticates the separate release operator. No credentials
-or application profile data belong in chat. The existing signed-in workstation
-does not grant the chatbot permission to publish.
+In an updated Windows TopBot desktop, send `/topbot-release 123` as a direct
+chat message after the PR's development checks pass. The preview is read-only
+and shows the PR, exact head and main commits, version, and the check run.
+Review that candidate, then send the displayed `/topbot-publish CODE` in the
+same chat within five minutes. Only the last preview is active; restarting
+TopBot invalidates it. The command runs on the server without calling the AI.
+
+One confirmation can mark a draft ready, merge the approved head, and queue
+**TopBot Windows Update** for the verified merge SHA. The first confirmation
+consumes the approval. If the PR or CI result changes, start over. If a network
+error follows a GitHub write, check the PR and Actions links before retrying:
+TopBot does not repeat writes with unknown outcomes. The Actions job packages
+and verifies Windows in CI; a queued build is not a published release.
+
+Chat release currently allows only Markdown under `docs`, source CSS,
+translations, and a version-only `package.json` change. The version must
+advance beyond main and the installed app. Other changes (including the
+initial rollout of this release feature) require independent maintainer review.
+For those, the repository owner can dispatch the release workflow separately
+after merging, using `publish: true` and the reviewed main SHA.
+
+The desktop verifies the `topway-ai` GitHub identity with the existing Windows
+Git Credential Manager and accepts commands only through the authenticated
+local desktop while bots are idle. If the Windows desktop does not inherit Git
+on PATH, set `gitExecutable` to the absolute Git executable in the existing
+development `config.json`. Keep that configuration outside any worktree.
+This is not protection against other
+software with unrestricted access to that Windows user or desktop. Keep the
+development bot's shell and computer permissions scoped; never enter tokens in
+chat or grant broad access to the release account.
 
 The existing [update and rollback flow](topbot-updates.md) takes over after a
 new compatible release is available. Opening or merging a PR alone does not

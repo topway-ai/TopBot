@@ -42,7 +42,7 @@ class DirectSendRefused extends Error {
 
 type AcceptInput = Parameters<BotMessageRouteDeps["acceptDirectSend"]>[0];
 
-async function fixture(over: Partial<Record<keyof BotMessageRouteDeps, unknown>> = {}, desktopManaged = true) {
+async function fixture(over: Partial<Record<keyof BotMessageRouteDeps, unknown>> = {}, desktopManaged = true, desktopOwner = false) {
   const store = new Store(() => sonnet);
   const bot = store.createBot({ name: "Scout" });
   const threadId = bot.threadId;
@@ -131,7 +131,7 @@ async function fixture(over: Partial<Record<keyof BotMessageRouteDeps, unknown>>
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
-      const auth = { kind: "loopback", scopes: ["admin"] } as RequestAuth;
+      const auth = { kind: "loopback", scopes: ["admin"], ...(desktopOwner ? { desktopOwner: true } : {}) } as RequestAuth;
       const handled = await dispatchRoutes(routes, { req, res, url, path: url.pathname, method: req.method ?? "GET", auth, json, readBody });
       if (!handled) json(res, 404, { from: "inline routes" });
     } catch (error) {
@@ -163,6 +163,35 @@ async function fixture(over: Partial<Record<keyof BotMessageRouteDeps, unknown>>
   const sent = (thread = threadId): Message[] => store.messagesFor(thread).filter((message) => message.role === "user");
   return { store, bot, threadId, state, post, edit, cancelQueued, show, row, sent, patches: vi.spyOn(store, "patchMessage") };
 }
+
+describe("TopBot release chat commands", () => {
+  it("records an authenticated direct send and the deterministic response without running a model", async () => {
+    const topBotChatRelease = vi.fn(async () => "Approved SHA preview");
+    const { store, threadId, state, post } = await fixture({ topBotChatRelease }, true, true);
+    const body = { text: "/topbot-release 7", threadId, sendId: SEND };
+    const result = await post(body);
+    expect(result.status).toBe(202);
+    expect((await post(body)).body.message.id).toBe(result.body.message.id);
+    expect(topBotChatRelease).toHaveBeenCalledExactlyOnceWith(threadId, { kind: "prepare", pr: 7 });
+    expect(store.messagesFor(threadId).at(-1)).toMatchObject({ role: "bot", text: "Approved SHA preview" });
+    expect(state.accepted).toEqual([]);
+  });
+
+  it("refuses shell loopback, phone and goal messages without starting turns", async () => {
+    const topBotChatRelease = vi.fn();
+    const shell = await fixture({ topBotChatRelease });
+    const desktop = await fixture({ topBotChatRelease }, true, true);
+    const text = "/topbot-publish 0123456789abcdef";
+    expect((await shell.post({ text })).status).toBe(403);
+    expect((await desktop.post({ text, mode: "goal" })).status).toBe(403);
+    expect((await desktop.post({ text, replyToId: "the-preview" })).status).toBe(403);
+    desktop.state.fromPhone = true;
+    expect((await desktop.post({ text })).status).toBe(403);
+    expect(topBotChatRelease).not.toHaveBeenCalled();
+    expect(shell.state.accepted).toEqual([]);
+    expect(desktop.state.accepted).toEqual([]);
+  });
+});
 
 describe("editing a message with no AI", () => {
   it("says what a Send says on a team, and starts no turn", async () => {

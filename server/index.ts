@@ -90,7 +90,7 @@ import { createQueuedNotes, createWaitWords } from "./host/wait-words.ts";
 import { landTurnFiles, parkedFilesKey, settleParkedFiles, takeParkedFiles, type ParkedTurnAttachment } from "./host/turn-attachments.ts";
 import { createReplyVoiceNotes } from "./host/reply-voice-notes.ts";
 import { runtimeRequestCardFields } from "./request-card.ts";
-import type { DirectSendInput, DirectSendReceipt } from "./direct-send.ts";
+import { DirectSendRefused, type DirectSendInput, type DirectSendReceipt } from "./direct-send.ts";
 import { finishedWithoutSummaryLine, ROOM_SUMMARY_REASK, roomTurnNarrationIds, roomTurnReply } from "./room-reply.ts";
 import { chosenPlace, pickComputer } from "./computer-selection.ts";
 import * as boat from "./boat.ts"; import { keyHint, keyStatus, nestedKeyStatus, withoutKeyHints } from "./key-hint.ts";
@@ -640,6 +640,7 @@ import { createNotificationRoutes, notificationListedFor } from "./routes/notifi
 import { createTodayRoutes } from "./routes/today.ts"; import { createInboxRoutes } from "./routes/inbox.ts"; import { createSidebarSectionRoutes } from "./routes/sidebar-sections.ts";
 import { createToolTimingRoute, createUsageRoutes } from "./routes/usage.ts"; import { createPrivateRecords } from "./host/private-records.ts"; import { createPublishedApps } from "./host/published-apps.ts"; import { savedNetlifyToken } from "./host/netlify-sites.ts"; import { createIncludedHosting } from "./host/included-hosting.ts"; import { createAppPublisher } from "./host/app-publisher.ts"; import { createPublishedAppsRoutes } from "./routes/published-apps.ts";
 import { createBotMessageRoutes } from "./routes/bot-messages.ts";
+import { createTopBotChatRelease } from "./topbot-chat-release.ts";
 import { clearInternalTurn, isInternalTurn, markInternalTurn } from "./internal-turns.ts"; import { createFirstReplyRescue } from "./first-reply-rescue.ts";
 import { createReactionRoutes } from "./routes/reactions.ts";
 import { createReactions, withReactionNotes, type Reactor } from "./reactions.ts";
@@ -7199,16 +7200,6 @@ async function startOrQueueDirectMessage(botId: string, threadId: string, text: 
   return { ok: true as const, threadId, message };
 }
 
-class DirectSendRefused extends Error {
-  readonly status: number;
-  readonly body: Record<string, unknown>;
-  constructor(status: number, body: Record<string, unknown>) {
-    super(typeof body.error === "string" ? body.error : "send refused");
-    this.status = status;
-    this.body = body;
-  }
-}
-
 function directSendRefusal(botId: string, threadId: string): DirectSendRefused | null {
   try {
     assertWithinBudget(cfg, DATA_DIR);
@@ -12087,6 +12078,7 @@ ROUTES.push(createBotMessageRoutes({
   routines: () => routines,
   fromPhone: phones.fromPhone, notePhoneSend: phones.noteSend,
   desktopManaged: DESKTOP_MANAGED, cloudHome: Boolean(CLOUD_HOME), DirectSendRefused,
+  topBotChatRelease: DESKTOP_MANAGED && !CLOUD_HOME && process.platform === "win32" ? createTopBotChatRelease({ installedVersion: serverVersion, eligible: () => !store.bots.some((bot) => bot.busy || activeGroupTurnForBot(bot.id) || store.tasks(bot.id).some((task) => threadBusy(bot.id, task.threadId))) }) : undefined,
   acceptDirectSend, directSendRefusal, startTurn, usageTriggerFor, messageSender, cloudGuestSendRefusal, cloudThreadRefusal, runOwners, runActor, resolveAccessRequest: (threadId, requestId, behavior, message) => lendingLifts?.resolve(threadId, requestId, behavior) ?? accessRequests.resolve(threadId, requestId, behavior, message), relayRefusal: CLOUD_TEAM ? (bot, email) => relayedSendRefusal(bot, email, Boolean(email && teamOwners.people?.list().some((one) => one.email === email && one.role !== "member"))) : undefined,
   noAiRefusal: noAiNotice.refusal, cardAnswerRefusal, commandRememberRefusal, requestBehavior, requestedTaskBot, botForThread, threadBusy,
   botAtThreadCapacity, parksBehindCoordination, activeGroupTurnForBot, runningTurnInstance, engineSteersImages, resolveReplyTarget,

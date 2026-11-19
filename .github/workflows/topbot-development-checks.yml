@@ -2,7 +2,7 @@ name: TopBot Development Checks
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened]
 permissions:
   contents: read
 concurrency:
@@ -27,4 +27,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node --test --test-concurrency=1 scripts/topbot-development.node-test.mjs
       - run: pnpm typecheck
+      - run: pnpm exec vitest run server/topbot-chat-release.test.ts server/routes/bot-messages.test.ts server/request-auth.test.ts --maxWorkers=1
       - run: pnpm exec vitest run scripts/testing/file-size-ratchet.test.ts --maxWorkers=1
