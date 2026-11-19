@@ -90,6 +90,14 @@ describe("owner's tag ruleset proof", () => {
     const { bypass_actors: _redacted, ...redacted } = rule;
     expect(await resolve(redacted)).toBeNull();
   });
+  it("normalizes GitHub timezone offsets without discarding subsecond revision changes", async () => {
+    for (const updated_at of ["2026-11-18T15:00:00.035-05:00", "2026-11-18T20:00:00.035000000Z"]) {
+      expect(await resolve({ ...rule, updated_at })).toBe("42@2026-11-18T20:00:00.035Z");
+    }
+    expect(await resolve({ ...rule, updated_at: "2026-11-19T01:30:00.035000001+05:30" }))
+      .toBe("42@2026-11-18T20:00:00.035000001Z");
+    expect(await resolve({ ...rule, updated_at: "2026-11-18T20:00:00.035+99:00" })).toBeNull();
+  });
   it("bounds discovery when no suitable ruleset exists; unknown API state is ineligible", async () => {
     const list = vi.fn(async () => Array.from({ length: 10 }, () => ({ id: 1, enforcement: "disabled" })));
     expect(await resolveTagRulesetProof(list, tag)).toBeNull();

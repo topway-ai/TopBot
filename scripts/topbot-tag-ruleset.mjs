@@ -1,14 +1,27 @@
 const repository = "topway-ai/TopBot";
 const endpoint = `/repos/${repository}/rulesets`;
 const tagPattern = /^v\d+\.\d+\.\d+(?:-topbot\.\d+)?$/;
-const timestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
+const timestamp = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/;
 const pageSize = 10, maxPages = 2;
+
+function utcRevision(value) {
+  const parts = typeof value === "string" && timestamp.exec(value);
+  if (!parts) return null;
+  const [, seconds, fraction, offset] = parts;
+  const time = Date.parse(seconds + offset);
+  if (!Number.isFinite(time)) return null;
+  // Owner and workflow tokens can receive different offsets for the same revision.
+  const digits = fraction?.replace(/0+$/, "");
+  return new Date(time).toISOString().replace(/\.000Z$/, digits ? `.${digits}Z` : "Z");
+}
 
 export function tagRulesetProof(rule, tagName, ownerProof = "") {
   if (typeof tagName !== "string" || !tagPattern.test(tagName) || !Number.isSafeInteger(rule?.id) || rule.id <= 0 ||
-      typeof rule.updated_at !== "string" || !timestamp.test(rule.updated_at) || rule.source_type !== "Repository" || rule.source !== repository ||
+      rule.source_type !== "Repository" || rule.source !== repository ||
       rule.target !== "tag" || rule.enforcement !== "active") return null;
-  const proof = `${rule.id}@${rule.updated_at}`;
+  const revision = utcRevision(rule.updated_at);
+  if (!revision) return null;
+  const proof = `${rule.id}@${revision}`;
   // GitHub hides bypass_actors from tokens without ruleset write access. Only the
   // owner's dispatch may vouch for a redacted list, never for a visible bypass.
   if (Object.hasOwn(rule, "bypass_actors") ? !Array.isArray(rule.bypass_actors) || rule.bypass_actors.length !== 0
