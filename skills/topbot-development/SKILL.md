@@ -1,6 +1,6 @@
 ---
 name: topbot-development
-description: Work on an explicitly requested TopBot source change and prepare a draft PR. Do not release it yourself.
+description: Work on an explicitly requested TopBot source change in an isolated job. Automatic release is handled by the desktop owner command.
 ---
 
 # TopBot development
@@ -35,13 +35,8 @@ release. Keep the user's current app, profiles, keys and chats out of developmen
    and opens or verifies a GitHub draft against `main`. Report the URL, exact
    commit, passed checks, and any protected paths. If authorization fails,
    report it; do not request tokens in chat or fall back to a wider credential.
-6. Stop at the draft. Never merge, tag, publish, touch main from the job,
-   dispatch a production workflow, change approvals, or overwrite the live app.
-   The automatic lane accepts only plain `topbot-release-notes/<slug>.txt`
-   and an exact package version bump. Use a version above installed and main;
-   after independent approval, GitHub merge, and full CI on the merged
-   commit, tell the owner to send `/topbot-release PR_NUMBER` in the Windows
-   desktop chat. The chat confirmation cannot merge or bypass required review.
-   Only the owner may send the one-time confirmation shown by the application.
-   All other changes require independent review and a separate release operator.
-   When done, `finish` archives the record without deleting the worktree or branch.
+6. Stop at the draft. Never publish or change release controls from a model
+   tool or a development job. The owner can start a separate unattended
+   iteration with one direct `/topbot-iterate REQUEST` message. Only that
+   desktop command can start its trusted automated review and release.
+   When done, `finish` archives this job without deleting its files.

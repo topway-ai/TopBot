@@ -10,15 +10,19 @@ import { resolveTagRulesetProof } from "../topbot-tag-ruleset.mjs";
 const repo = "topway-ai/TopBot", version = "0.1.161-topbot.9", tag = `v${version}`;
 const archive = `TopBot-${version}-x64.zip`, manifest = "topbot-windows-update.json";
 const bytes = Buffer.from("qualified archive"), sha = "a".repeat(40);
-const base = "b".repeat(40), head = "c".repeat(40), tree = "d".repeat(40);
-const repoRef = { full_name: repo, node_id: "R_kgDOVvY7xw" };
-const mainRuleset = { id: 27644709, source: repo, source_type: "Repository", target: "branch", enforcement: "active",
-  updated_at: "2026-11-19T09:16:35.740-05:00", conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } } };
-const mergedPR = { number: 7, merge_commit_sha: sha, state: "closed", merged: true, draft: false, user: { id: 3 },
-  merged_at: "2026-11-18T20:10:00Z", base: { ref: "main", repo: repoRef }, head: { sha: head } };
-const reviewer = { login: "reviewer", id: 18, type: "User" };
-const approval = { id: 64, user: reviewer, state: "APPROVED", commit_id: head, submitted_at: "2026-11-18T20:05:00Z" };
-const ci = { id: 98, run_attempt: 2, event: "workflow_dispatch", head_sha: sha, head_branch: "main",
+const base = "b".repeat(40), tree = "d".repeat(40), branch = "topbot-auto/fixture";
+const repoRef = { id: 1458977735, full_name: repo, node_id: "R_kgDOVvY7xw" };
+const mergedPR = { number: 7, merge_commit_sha: sha, state: "closed", merged: true, draft: false,
+  base: { ref: "main", sha: base, repo: repoRef }, head: { ref: branch, sha, repo: repoRef } };
+const checkNames = ["CI", "TopBot automatic review"];
+const releaseRules = [{ type: "deletion" }, { type: "non_fast_forward" },
+  { type: "required_status_checks", parameters: {
+    required_status_checks: checkNames.map(context => ({ context, integration_id: 15368 })) } }];
+const autoPolicy = releaseRules.map(rule => ({ ...rule, ruleset_id: 55, ruleset_source: repo, ruleset_source_type: "Repository" }));
+const prRun = (workflow: string, id: number) => ({ id, run_attempt: 1, event: "pull_request", head_sha: sha, head_branch: branch,
+  head_repository: repoRef, repository: repoRef, path: `.github/workflows/${workflow}`, status: "completed", conclusion: "success",
+  pull_requests: [{ number: 7, base: mergedPR.base, head: mergedPR.head }] });
+const ci = { id: 98, run_attempt: 1, event: "workflow_dispatch", head_sha: sha, head_branch: branch,
   head_repository: repoRef, path: ".github/workflows/ci.yml", status: "completed", conclusion: "success" };
 const digest = (data: Uint8Array) => createHash("sha256").update(data).digest("hex");
 const rule = { id: 42, updated_at: "2026-11-18T20:00:00Z", source_type: "Repository", source: repo,
@@ -59,29 +63,35 @@ function github(intercept?: Intercept) {
     expect(origin).toBe(init.body instanceof Blob ? "https://uploads.github.com" : "https://api.github.com");
     const override = intercept?.(call, calls.filter(entry => entry === call).length);
     if (override) return override;
+    if (/^GET contents\/(?:\.github\/workflows\/|scripts\/topbot-auto-review)/.test(call)) {
+      return json({ type: "file", path: path.slice("contents/".length), sha: tree });
+    }
     switch (call) {
       case "GET branches/main":
         expect(new Headers(init.headers).get("authorization")).toBe("Bearer read-only-fixture");
         return json({ protected: true, commit: { sha } });
-      case "GET rulesets/27644709": return json(mainRuleset);
-      case "GET rules/branches/main": return json([
-        { type: "pull_request", parameters: { required_approving_review_count: 1, dismiss_stale_reviews_on_push: true,
-          require_last_push_approval: true, required_review_thread_resolution: true } },
-        { type: "required_status_checks", parameters: { strict_required_status_checks_policy: true,
-          required_status_checks: [{ context: "CI", integration_id: 15368 }] } },
-      ]);
+      case "GET rules/branches/main": return json(autoPolicy);
+      case "GET rulesets/55": return json({ id: 55, source: repo, source_type: "Repository", target: "branch", enforcement: "active", rules: releaseRules, bypass_actors: [] });
       case "GET immutable-releases": return json({ enabled: true });
       case `GET commits/${sha}/pulls`: return json([mergedPR]);
       case "GET pulls/7": return json(mergedPR);
-      case `GET commits/${sha}`: return json({ sha, parents: [{ sha: base }, { sha: head }], commit: { tree: { sha: tree } } });
-      case `GET commits/${head}`: return json({ sha: head, commit: { tree: { sha: tree } } });
-      case "GET pulls/7/reviews": return json([approval]);
-      case "GET collaborators/reviewer/permission": return json({ permission: "write", user: reviewer });
+      case `GET commits/${sha}`: return json({ sha, parents: [{ sha: base }], commit: { tree: { sha: tree } } });
       case "GET actions/workflows/ci.yml/runs":
-        expect(search).toBe(`?event=workflow_dispatch&branch=main&head_sha=${sha}&per_page=1`);
+        if (search.includes("event=pull_request")) return json({ total_count: 1, workflow_runs: [prRun("ci.yml", 96)] });
+        expect(search).toBe(`?event=workflow_dispatch&branch=${encodeURIComponent(branch)}&head_sha=${sha}&per_page=1`);
         return json({ workflow_runs: [ci] });
-      case "GET actions/runs/98/attempts/2/jobs":
+      case "GET actions/workflows/topbot-automatic-review.yml/runs":
+        return json({ total_count: 1, workflow_runs: [prRun("topbot-automatic-review.yml", 97)] });
+      case "GET actions/runs/96/attempts/1/jobs":
+      case "GET actions/runs/97/attempts/1/jobs": {
+        const id = call.includes("/96/") ? 96 : 97;
+        return json({ total_count: 1, jobs: [{ name: checkNames[id - 96], id: 300 + id, run_id: id, head_sha: sha,
+          status: "completed", conclusion: "success" }] });
+      }
+      case "GET actions/runs/98/attempts/1/jobs":
         return json({ jobs: [{ name: "CI", head_sha: sha, status: "completed", conclusion: "success" }] });
+      case "GET contents/package.json": return json({ type: "file", encoding: "base64",
+        content: Buffer.from('{"version":"0.1.161-topbot.8"}').toString("base64") });
       case "GET rulesets": return json([rule]);
       case "GET rulesets/42": return json(rule);
       case "GET releases": return json(created ? [draft] : []);
@@ -148,36 +158,29 @@ describe("publish the qualified Windows build", () => {
     await gh.run();
     expect(gh.writes).toEqual(["POST git/refs", "POST releases", "POST releases/12/assets", "POST releases/12/assets", "PATCH releases/12"]);
     const index = gh.calls.indexOf("PATCH releases/12");
-    expect(gh.calls.slice(index - 3, index)).toEqual(["GET actions/runs/98/attempts/2/jobs", `GET git/ref/tags/${tag}`, "GET releases/12"]);
+    expect(gh.calls.slice(index - 3, index)).toEqual(["GET actions/runs/98/attempts/1/jobs", `GET git/ref/tags/${tag}`, "GET releases/12"]);
     expect(gh.calls.filter(call => call === "GET immutable-releases")).toHaveLength(2);
   });
   it.each([
     ["unprotected main", "GET branches/main", { protected: false, commit: { sha } }],
-    ["changed no-bypass revision", "GET rulesets/27644709", { ...mainRuleset, updated_at: "2026-11-19T14:16:35.741Z" }],
-    ["visible main bypass actor", "GET rulesets/27644709", { ...mainRuleset, bypass_actors: [{ actor_id: 1 }] }],
+    ["a required human approval", "GET rules/branches/main", [...autoPolicy, { type: "pull_request" }]],
     ["no protected review policy", "GET rules/branches/main", []],
     ["mutable releases", "GET immutable-releases", { enabled: false }],
     ["old main SHA", "GET branches/main", { protected: true, commit: { sha: base } }],
-    ["wrong PR tree", `GET commits/${head}`, { sha: head, commit: { tree: { sha: base } } }],
-    ["review from owner", "GET pulls/7/reviews", [{ ...approval, user: { ...reviewer, login: "topway-ai" } }]],
-    ["review from PR author", "GET pulls/7/reviews", [{ ...approval, user: { ...reviewer, id: mergedPR.user.id } }]],
-    ["review on old head", "GET pulls/7/reviews", [{ ...approval, commit_id: base }]],
-    ["review after merge", "GET pulls/7/reviews", [{ ...approval, submitted_at: "2026-11-18T20:15:00Z" }]],
-    ["dismissed review", "GET pulls/7/reviews", [approval, { ...approval, id: 65, state: "DISMISSED" }]],
-    ["reviewer without write access", "GET collaborators/reviewer/permission", { permission: "read", user: reviewer }],
-    ["CI run pending", "GET actions/workflows/ci.yml/runs", { workflow_runs: [{ ...ci, conclusion: null, status: "in_progress" }] }],
-    ["selective CI only", "GET actions/workflows/ci.yml/runs", { workflow_runs: [{ ...ci, event: "push" }] }],
-    ["CI from wrong SHA", "GET actions/workflows/ci.yml/runs", { workflow_runs: [{ ...ci, head_sha: head }] }],
-    ["final CI check failed", "GET actions/runs/98/attempts/2/jobs", { jobs: [{ name: "CI", head_sha: sha, status: "completed", conclusion: "failure" }] }],
+    ["wrong snapshot parents", `GET commits/${sha}`, { sha, parents: [{ sha: base }, { sha: base }], commit: { tree: { sha: tree } } }],
+    ["automatic review denied", "GET actions/workflows/topbot-automatic-review.yml/runs",
+      { total_count: 1, workflow_runs: [{ ...prRun("topbot-automatic-review.yml", 97), conclusion: "failure" }] }],
+    ["CI run pending", "GET actions/runs/98/attempts/1/jobs", { jobs: [{ name: "CI", head_sha: sha, status: "in_progress", conclusion: null }] }],
+    ["final CI check failed", "GET actions/runs/98/attempts/1/jobs", { jobs: [{ name: "CI", head_sha: sha, status: "completed", conclusion: "failure" }] }],
   ])("refuses %s before reserving the tag", async (_title, path, body) => {
     const gh = github(call => call === path ? json(body) : undefined);
     await expect(gh.run()).rejects.toThrow();
     expect(gh.writes).toEqual([]);
   });
   it("checks for review and CI changes again before publishing", async () => {
-    const gh = github((call, count) => call === "GET pulls/7/reviews" && count === 2
-      ? json([{ ...approval, state: "DISMISSED" }]) : undefined);
-    await expect(gh.run()).rejects.toThrow(/审核权限/);
+    const gh = github((call, count) => call === "GET actions/workflows/topbot-automatic-review.yml/runs" && count === 2
+      ? json({ total_count: 1, workflow_runs: [{ ...prRun("topbot-automatic-review.yml", 97), conclusion: "failure" }] }) : undefined);
+    await expect(gh.run()).rejects.toThrow(/did not finish successfully/);
     expect(gh.writes).toContain("POST git/refs");
     expect(gh.writes).not.toContain("PATCH releases/12");
   });

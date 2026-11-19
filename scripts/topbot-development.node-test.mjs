@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { gitAt, runDevelopment } from "./topbot-development.mjs";
+import { reviewAutomaticSnapshot } from "./topbot-auto-review.mjs";
 
 const GiB = 1024 ** 3;
 const origin = "https://github.com/topway-ai/TopBot.git";
@@ -52,7 +53,12 @@ function fixture(t) {
   const control = { login: "topway-ai", pulls: [] };
   let branchRef;
   const options = { home, availableRam: () => 8 * GiB, disk: () => ({ bavail: 20, bsize: GiB }), git: (cwd, args, io) => {
+    assert.notEqual(cwd, control.workerAfterHandoff, "trusted operations must not load worker Git configuration");
     if (["fetch", "push", "ls-remote"].includes(args[0])) {
+      if (args[0] === "fetch" && args.includes(pathToFileURL(checkout).href)) {
+        assert.equal(path.dirname(cwd), worktrees);
+        return gitAt(cwd, args, io);
+      }
       assert.ok(args.includes(origin) || args.includes("origin"), "only the fixture transport is permitted");
       const local = args.map(a => a === origin || a === "origin" ? url : a);
       if (args[0] === "push") {
@@ -334,4 +340,142 @@ test("fails closed for low resources, hostile slugs and unsupported release comm
   await assert.rejects(runDevelopment(["start","test"], { ...f.options, availableRam: () => GiB }), /3 GiB/);
   await assert.rejects(f.run("start","../escape"), /Use doctor/);
   await assert.rejects(f.run("publish"), /Use doctor/);
+});
+
+const component = "src/components/DetailToggle.tsx";
+const feature = [
+  'import { useState } from "react";',
+  'export function DetailToggle({ detail }: { detail: string }) {',
+  '  const [open, setOpen] = useState(false);',
+  '  return <section><button aria-expanded={open} onClick={() => setOpen(!open)}>Details</button>',
+  '    {open && <p>{detail}</p>}</section>;',
+  '}', '',
+].join("\n");
+
+test("automatic worker owns its Git store; candidate publishes one independently auditable non-draft", async t => {
+  const f = fixture(t);
+  git(f.checkout, "config", "--local", "credential.helper", "fixture-only-helper");
+  const job = await f.run("start-auto", "details");
+  const metadata = path.join(job.path, ".git");
+  assert.ok(lstatSync(metadata).isDirectory());
+  assert.equal(realpathSync(git(job.path, "rev-parse", "--path-format=absolute", "--git-common-dir")), realpathSync(metadata));
+  assert.equal(existsSync(path.join(metadata, "objects", "info", "alternates")), false);
+  assert.equal(git(job.path, "config", "--local", "--get-all", "credential.helper"), "");
+  assert.equal(git(job.path, "config", "--local", "core.hooksPath"), "/dev/null");
+  assert.equal(git(job.path, "remote", "get-url", "origin"), origin);
+  assert.equal(job.branch, "topbot-auto/details");
+  assert.equal(git(job.path, "rev-parse", "HEAD"), job.base);
+  const originalObjects = inventory(f.checkout);
+  write(job.path, "scratch.txt", "Unpublished intermediate data\n");
+  git(job.path, "add", "scratch.txt");
+  git(job.path, "commit", "-m", "Private intermediate message");
+  const hidden = git(job.path, "rev-parse", "HEAD");
+  git(job.path, "rm", "scratch.txt");
+  write(job.path, component, 'import "./DetailToggle.css";\nimport { detailLabel } from "../lib/detail-label.ts";\n' +
+    feature.replace(">Details</button>", ">{detailLabel}</button>"));
+  write(job.path, "src/components/DetailToggle.css", ".detail-toggle { display: grid; }\n");
+  write(job.path, "src/lib/detail-label.ts", "export const detailLabel = 'Details';\n");
+  write(job.path, note, "Added a details toggle.\n");
+  write(job.path, "package.json", bump);
+  await assert.rejects(f.run("candidate"), /uncommitted/);
+  const source = save(job.path, "Private author metadata");
+  f.control.workerAfterHandoff = job.path;
+  assert.throws(() => reviewAutomaticSnapshot(job.path, job.base, source), /single direct child/);
+  await assert.rejects(f.run("draft"), /job mode/);
+  assert.equal(f.api.length, 0);
+  const receipt = await f.run("candidate");
+  const ref = `refs/heads/${job.branch}`;
+  assert.deepEqual(receipt, { draft: "https://github.com/topway-ai/TopBot/pull/7", head: git(f.remote, "rev-parse", ref),
+    pr: 7, branch: job.branch, base: f.head });
+  assert.equal(f.control.pulls[0].draft, false);
+  assert.deepEqual(reviewAutomaticSnapshot(f.remote, receipt.base, receipt.head), {
+    tree: git(job.path, "rev-parse", `${source}^{tree}`), files: ["package.json", "src/components/DetailToggle.css", component, "src/lib/detail-label.ts", note],
+    version: "1.2.3-topbot.2",
+  });
+  assert.deepEqual(await f.run("candidate"), receipt);
+  f.control.pulls[0].draft = true;
+  await assert.rejects(f.run("candidate"), /manual recovery/);
+  write(job.path, component, feature + "// Another edit\n");
+  save(job.path, "Later work");
+  await assert.rejects(f.run("candidate"), /immutable snapshot/);
+  assert.equal(f.pushes.length, 1);
+  assert.equal(f.api.filter(e => e.payload).length, 1);
+  assert.ok(!inventory(f.remote).includes(hidden) && !inventory(f.remote).includes(source));
+  assert.deepEqual(inventory(f.checkout), originalObjects);
+  assert.equal(git(f.checkout, "branch", "--list", job.branch), "");
+});
+
+test("automatic policy rejects protected paths, capabilities, private data and non-regular modes before publication", async t => {
+  const f = fixture(t);
+  const job = await f.run("start-auto", "blocked-auto");
+  const bad = [".github/workflows/test.yml", "src/components/Card.test.tsx", "src/lib/agent-instructions.ts", "src/lib/session-auth.ts",
+    "src/components/PublishPanel.tsx", "src/lib/install-helper.ts", "src/lib/secrets.ts", "pnpm-lock.yaml"];
+  for (const file of bad) write(job.path, file, "fixture\n");
+  write(job.path, component, 'export const p = "/Users/private/data";\n');
+  write(job.path, "src/lib/format.ts", 'export const value = "ghp_' + "a".repeat(40) + '";\n');
+  write(job.path, "src/components/Chart.tsx", 'import fs from "node:fs";\n');
+  write(job.path, "src/components/Binary.ts", Buffer.from([0, 255]));
+  const head = save(job.path, "Protected surface");
+  assert.throws(() => reviewAutomaticSnapshot(job.path, job.base, head), /Candidate blocked/);
+  assert.deepEqual((await f.run("review")).blocked.map(e => e.file).sort(), [...bad, component, "src/lib/format.ts",
+    "src/components/Chart.tsx", "src/components/Binary.ts"].sort());
+  await assert.rejects(f.run("candidate"), /Candidate blocked/);
+  git(job.path, "rm", "-r", ".");
+  git(job.path, "restore", "--source", job.base, "--staged", "--worktree", ".");
+  write(job.path, component, "linked");
+  write(job.path, "src/lib/format.ts", "marked executable\n");
+  write(job.path, "package.json", bump.replace('"scripts": {}', '"scripts": {"prepare":"changed"}'));
+  git(job.path, "add", "-A");
+  git(job.path, "update-index", "--cacheinfo", `120000,${git(job.path, "rev-parse", ":" + component)},${component}`);
+  git(job.path, "update-index", "--chmod=+x", "src/lib/format.ts");
+  commit(job.path, "Modes and manifest");
+  assert.deepEqual((await f.run("review")).blocked.map(e => e.file).sort(), ["package.json", component, "src/lib/format.ts"]);
+  assert.equal(f.pushes.length, 0);
+  assert.equal(f.api.length, 0);
+});
+
+test("standalone audit uses pinned objects, rejects hidden tree entries, and enforces byte, line and path budgets", async t => {
+  const f = fixture(t);
+  const job = await f.run("start", "pinned");
+  await assert.rejects(f.run("candidate"), /job mode/);
+  write(job.path, component, feature);
+  const unchanged = save(job.path, "Version not increased");
+  assert.throws(() => reviewAutomaticSnapshot(job.path, job.base, unchanged), /must increase/);
+  git(job.path, "reset", "--soft", job.base);
+  write(job.path, "package.json", bump);
+  const head = save(job.path, "Direct child");
+  write(job.path, component, "dirty working tree\n");
+  const audit = id => reviewAutomaticSnapshot(job.path, job.base, id);
+  assert.deepEqual(audit(head), { tree: git(job.path, "rev-parse", `${head}^{tree}`), files: ["package.json", component], version: "1.2.3-topbot.2" });
+  assert.throws(() => audit("HEAD"), /pinned commit SHAs/);
+  assert.throws(() => audit(audit(head).tree), /Expected commit objects/);
+  const empty = gitAt(job.path, ["mktree"], { input: "" }).trim();
+  const entries = gitAt(job.path, ["ls-tree", "-z", head]);
+  const tree = gitAt(job.path, ["mktree", "-z"], { input: entries + `040000 tree ${empty}\tunexpected\0` }).trim();
+  const makeHead = tree => git(job.path, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit-tree", tree, "-p", job.base, "-m", "Candidate");
+  assert.throws(() => audit(makeHead(tree)), /Unreviewed tree entries/);
+  for (const [content, error] of [["x".repeat(65537), /Large blob/], ["x\n".repeat(1601), /text budget/]]) {
+    write(job.path, component, content);
+    git(job.path, "add", component);
+    assert.throws(() => audit(makeHead(git(job.path, "write-tree"))), error);
+  }
+  write(job.path, component, feature);
+  for (let i = 0; i < 12; i++) write(job.path, `src/lib/label-${i}.ts`, "export const label = 'ok';\n");
+  git(job.path, "add", "-A");
+  assert.throws(() => audit(makeHead(git(job.path, "write-tree"))), /12-file budget/);
+  assert.equal(f.api.length, 0);
+  assert.equal(f.pushes.length, 0);
+});
+
+test("an incomplete automatic job can be retired without deleting its dirty worktree or touching GitHub", async t => {
+  const f = fixture(t);
+  const job = await f.run("start-auto", "interrupted");
+  write(job.path, component, feature);
+  await assert.rejects(f.run("retire-auto", "other"), /No matching automatic job/);
+  const result = await f.run("retire-auto", "interrupted");
+  assert.equal(result.worktreeRetained, job.path);
+  assert.equal(readFileSync(path.join(job.path, component), "utf8"), feature);
+  assert.equal((await f.run("doctor")).active, null);
+  assert.equal(f.api.length, 0);
+  assert.equal(f.pushes.length, 0);
 });

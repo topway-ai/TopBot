@@ -36,43 +36,39 @@ a sandbox for a bot granted unrestricted shell or browser access. Enforce
 repository permissions and protected paths separately; never give the routine
 development bot unrestricted owner credentials or automatic approval.
 
-## Release From Chat
+## Automatic Iteration
 
-In an updated Windows TopBot desktop, send `/topbot-release 123` as a direct
-chat message after GitHub has merged an independently approved PR and the
-merged commit has passed full CI. The preview is read-only and shows the PR,
-exact merged commit, version, and the full CI run.
-Review that candidate, then send the displayed `/topbot-publish CODE` in the
-same chat within five minutes. Only the last preview is active; restarting
-TopBot invalidates it. The command runs on the server without calling the AI.
+In a provisioned Windows desktop, send one direct `/topbot-iterate REQUEST`
+message. The authenticated local owner is the only caller. The installed
+controller uses a workspace-limited coding runner and reads GitHub
+credentials separately from the editor. One job runs at a time.
 
-One confirmation can queue **TopBot Windows Update** for that SHA. The
-desktop cannot merge, push to a branch or create a tag. GitHub must enforce
-PR review, stale approval dismissal, last-push approval by another person,
-resolved discussions, and a strict GitHub Actions `CI` check on `main`.
-The first confirmation consumes its code. If the review, CI attempt or
-main commit changes, start over. If a network
-error follows a GitHub write, check the PR and Actions links before retrying:
-TopBot does not repeat writes with unknown outcomes. The Actions job packages
-and verifies Windows in CI; a queued build is not a published release.
+The controller uploads only a sanitized single-commit snapshot. A trusted
+base-checkout workflow audits the changed paths and file objects without
+executing candidate code. The automatic lane accepts ordinary UI code under
+`src/components` and `src/lib`, release notes and an exact version bump.
+Release policy, credentials, dependencies, CI and migrations cannot be edited
+by an iteration.
 
-The automatic lane accepts plain non-executable notes named
-`topbot-release-notes/<lowercase-slug>.txt` and a version-only
-`package.json` change. Code, styles, rendered documentation, translations
-and CI inputs are not treated as inert files. The version must
-advance beyond the prior main version and the installed app. Other changes (including the
-initial rollout of this release feature) require independent maintainer review.
-For those, the repository owner can dispatch the release workflow separately
-after merging, using `publish: true` and the reviewed main SHA.
+The protected main branch must require GitHub Actions' `CI` and `TopBot
+automatic review` checks, block deletion and force pushes, and have no
+manual review requirement or bypass actors. After both checks pass on the
+exact snapshot and base, the controller runs full CI and an artifact-only
+Windows qualification on that exact candidate. Only then does GitHub apply
+a non-forcing atomic ref update and start publication. The publish job
+rechecks CI before reserving a tag and before publishing.
+There is no second chat confirmation, human review or approval environment.
 
-Both dispatch paths require the same evidence. The merge commit's tree
-must match the reviewed PR head. A human with repository write permission,
-other than the PR author or publishing owner, must approve that exact head
-before merge. After merging, run the full **CI** workflow from the Actions
-tab on `main` (the manual event uses the full matrix). A selective PR or
-push run alone does not qualify. The publish job independently reads the
-approval and full CI for the exact commit before creating the tag, and
-rechecks both before publishing the draft.
+Provision the trusted local `automatic` configuration in
+`%USERPROFILE%/.topbot-development/config.json` with `enabled` and absolute
+`nodeExecutable` and `workerExecutable` paths. The worker accepts a JSON
+object with `workspace` and `prompt` on stdin, commits only to that workspace,
+and must run in a separately provisioned profile with no access to the
+desktop owner's data or credentials. Do not use the owner's normal Codex
+launcher as this worker. The required workflows and
+review script must already be installed on the trusted main branch. Rehearse
+with disposable data before changing an existing production install or
+repository policy. The controller never disables protection as a fallback.
 
 Enable GitHub Immutable Releases for this repository before testing a
 production dispatch. The publish job checks that the setting is enabled
@@ -88,9 +84,9 @@ Limit release writers: drafts remain mutable until GitHub publishes them.
 Before either release path can publish, configure an active repository **tag**
 ruleset covering `refs/tags/v*` (no exclusions or bypass actors). Restrict
 updates and deletions, not creation. The owner must be able to read the full
-rule, including its bypass list. Chat reads it at preview and again at
-confirmation and passes its ID and revision to the workflow. A missing rule
-is a stop condition, not permission to publish an unprotected tag. For a
+rule, including its bypass list. The iteration controller reads it before
+dispatch and passes its ID and revision to the workflow. A missing rule is a
+stop condition, not permission to publish an unprotected tag. For a
 manual dispatch use the verified `ID@updated_at` as `reviewed_tag_ruleset`.
 Creating repository rules is an explicit owner operation; the app does not do it.
 If a publication stops after reserving its tag, inspect the tag and draft

@@ -67,10 +67,14 @@ async function run(mode) {
   child.stdout.on("data", chunk => { output = (output + chunk).slice(-8000); });
   child.stderr.on("data", chunk => { output = (output + chunk).slice(-8000); });
   const done = new Promise((resolve, reject) => { child.once("error", reject); child.once("exit", code => resolve(code)); });
-  if (mode === "Apply") {
+  if (mode === "Apply" || mode === "Rollback") {
     for (let i = 0; i < 150; i++) {
       const receipt = await json(path.join(job, "helper-ready.json")).catch(() => null);
-      if (receipt?.pid === child.pid) { await writeFile(path.join(job, "go.json"), JSON.stringify({ token: plan.token, pid: child.pid })); break; }
+      if (receipt?.pid === child.pid && receipt.token === plan.token) {
+        await writeFile(path.join(job, "go.json"), JSON.stringify({ token: plan.token, pid: child.pid }));
+        if (mode === "Rollback") await writeFile(path.join(job, "stop.json"), JSON.stringify({ token: plan.token }));
+        break;
+      }
       if (child.exitCode !== null) break;
       await pause(100);
     }
@@ -93,6 +97,14 @@ try {
   assert.equal(health.ready, true); assert.equal(health.version, build.version);
   assert.equal(await readFile(path.join(data, "qualification.txt"), "utf8"), "Disposable update fixture. No real account or key.\n");
   assert.ok((await stat(path.join(job, "previous", "TopBot.exe"))).isFile());
+  if (process.argv.includes("--rollback-check")) {
+    const sentinel = path.join(data, "after-upgrade.txt");
+    await writeFile(sentinel, "The user's data must survive program rollback.\n");
+    assert.equal((await run("Rollback")).phase, "rolled-back");
+    assert.equal(await readFile(sentinel, "utf8"), "The user's data must survive program rollback.\n");
+    assert.equal(JSON.parse(asar.extractFile(path.join(installDir, "resources", "app.asar"), "package.json").toString()).version, previousVersion);
+    report.rollback = { version: previousVersion, retainedNewData: true };
+  }
   report.health = { ...health, token: "[omitted]" }; report.passed = true;
 } finally {
   await writeFile(path.join(job, "stop.json"), JSON.stringify({ token: plan.token }));

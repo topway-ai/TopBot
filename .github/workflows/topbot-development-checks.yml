@@ -29,4 +29,5 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm exec vitest run server/topbot-chat-release.test.ts server/routes/bot-messages.test.ts server/request-auth.test.ts --maxWorkers=1
       - run: pnpm exec vitest run scripts/testing/topbot-release-publication.test.ts --maxWorkers=1
+      - run: pnpm exec vitest run scripts/testing/topbot-auto-github.test.ts scripts/testing/topbot-iteration.test.ts --maxWorkers=1
       - run: pnpm exec vitest run scripts/testing/file-size-ratchet.test.ts --maxWorkers=1

@@ -85,7 +85,7 @@ async function verifyFileModes(request: Read, tree: string, files: z.infer<typeo
 
 async function inspect(request: Read, number: number, installed: string, verifyGate: typeof verifyWindowsReleaseGate): Promise<Candidate> {
   const pr = pull.parse(await request(`${repo}/pulls/${number}`));
-  requireCondition(pr.number === number && pr.base.ref === "main" && /^topbot-dev\/[a-z0-9][a-z0-9-]{0,39}$/.test(pr.head.ref),
+  requireCondition(pr.number === number && pr.base.ref === "main" && /^topbot-auto\/[a-z0-9][a-z0-9-]{0,39}$/.test(pr.head.ref),
     "只接受 TopBot 仓库内、由开发流程提交到 main 的 PR。");
   const gate = await verifyGate(request, pr.merge_commit_sha, number);
   const { base, head, tree } = gate;
@@ -198,7 +198,7 @@ export function createTopBotChatRelease({ installedVersion, connect = connectCha
         pending = { threadId, code, until: now() + lifetime, candidate };
         const listed = candidate.files.slice(0, 10).map((file) => `- \`${file}\``).join("\n");
         return [`**正式发布预览：TopBot ${version}**`, `[查看 PR #${pr} 的完整改动](${project}/pull/${pr}/files) · ${candidate.files.length} 个文件`,
-          `受保护 main 的合并提交：\`${merged}\``, `经过独立审核的提交：\`${head}\``, `合并前的 main：\`${base}\``,
+          `受保护 main 的提交：\`${merged}\``, `经过自动审核的提交：\`${head}\``, `更新前的 main：\`${base}\``,
           `[完整 CI](${project}/actions/runs/${ciRun}/attempts/${ciAttempt}) 已通过。`,
           `改动文件${candidate.files.length > 10 ? "（前 10 项）" : ""}：\n${listed}`,
           `确认仅授权为上述合并提交启动发布工作流，不会合并 PR 或修改分支。仅在这个聊天内发送 \`/topbot-publish ${code}\`，5 分钟内有效、只能用一次。`].join("\n\n");

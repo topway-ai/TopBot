@@ -8,11 +8,15 @@ on:
         type: boolean
         default: false
       reviewed_sha:
-        description: Full SHA of the reviewed main commit (required to publish)
+        description: Full SHA of the automatically reviewed main commit (required to publish)
         type: string
         default: ""
       reviewed_tag_ruleset:
-        description: No-bypass tag ruleset verified by the owner (ID@updated_at, from the ruleset API)
+        description: Verified no-bypass tag ruleset (ID@updated_at from the ruleset API)
+        type: string
+        default: ""
+      verified_ci_run:
+        description: Exact full CI workflow run ID for the candidate
         type: string
         default: ""
 permissions:
@@ -22,7 +26,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    if: github.repository == 'topway-ai/TopBot' && github.ref == 'refs/heads/main'
+    if: github.repository == 'topway-ai/TopBot' && (github.ref == 'refs/heads/main' || (!inputs.publish && startsWith(github.ref, 'refs/heads/topbot-auto/')))
     runs-on: windows-latest
     timeout-minutes: 60
     outputs:
@@ -30,8 +34,8 @@ jobs:
     env:
       NODE_OPTIONS: --max-old-space-size=3072
     steps:
-      - name: Verify the owner-approved publish target
-        if: inputs.publish
+      - name: Verify the exact candidate commit
+        if: inputs.publish || startsWith(github.ref, 'refs/heads/topbot-auto/')
         shell: pwsh
         env:
           REVIEWED_SHA: ${{ inputs.reviewed_sha }}
@@ -55,8 +59,8 @@ jobs:
         run: node --test --test-concurrency=1 electron/topbot-update.node-test.mjs electron/updater-coordinator.node-test.mjs electron/update-when-quiet.node-test.mjs electron/startup-tray.node-test.mjs
       - name: Desktop menu, task pause and source size regression
         run: pnpm exec vitest run electron/managed-desktop-updates.test.mjs electron/updater.test.mjs server/move-freeze.test.ts server/move-freeze-thaw.test.ts scripts/testing/file-size-ratchet.test.ts scripts/patch-appimage-updater.test.mjs --maxWorkers=1 --testTimeout=120000
-      - name: Verify chat release approvals and desktop authentication
-        run: pnpm exec vitest run scripts/testing/topbot-release-publication.test.ts server/topbot-chat-release.test.ts server/routes/bot-messages.test.ts server/request-auth.test.ts --maxWorkers=1
+      - name: Verify automatic review, publication and desktop authentication
+        run: pnpm exec vitest run scripts/testing/topbot-auto-github.test.ts scripts/testing/topbot-iteration.test.ts scripts/testing/topbot-release-publication.test.ts server/topbot-chat-release.test.ts server/routes/bot-messages.test.ts server/request-auth.test.ts --maxWorkers=1
       - run: pnpm package:win
       - name: Packaged server smoke test
         env:
@@ -108,4 +112,6 @@ jobs:
           TOPBOT_RELEASE_POLICY_TOKEN: ${{ secrets.TOPBOT_RELEASE_POLICY_TOKEN }}
           REVIEWED_SHA: ${{ inputs.reviewed_sha }}
           REVIEWED_TAG_RULESET: ${{ inputs.reviewed_tag_ruleset }}
+          VERIFIED_CI_RUN: ${{ inputs.verified_ci_run }}
+          TOPBOT_AUTOMATIC_MAIN_RULESETS: ${{ vars.TOPBOT_AUTOMATIC_MAIN_RULESETS }}
         run: node source/scripts/publish-topbot-windows.mjs release

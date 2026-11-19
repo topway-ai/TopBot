@@ -17,7 +17,7 @@ function fixture() {
   const mutations: Array<[string, string, unknown]> = [];
   const state = { time: 0, idle: true, draft: false, prState: "closed", prMerged: true, mergeSha: merged, prHead: head, gate: { ...gate }, gateError: "",
     file: "topbot-release-notes/layout.txt", mode: "100644", packageMode: "100644", previous: undefined as string | undefined, changedFiles: 2, additions: 5,
-    main: merged, protected: true, mainAfterGate: "", unprotectAfterGate: false, parent: base, compareTree: tree, baseRef: "main", headRef: "topbot-dev/layout",
+    main: merged, protected: true, mainAfterGate: "", unprotectAfterGate: false, parent: base, compareTree: tree, baseRef: "main", headRef: "topbot-auto/layout",
     unknownDispatch: false, user: "topway-ai", metadata: {}, version: "0.1.161-topbot.9", lastRelease: "v0.1.161-topbot.6", missingVersion: true,
     ruleset: true, headRepoId: "R_kgDOVvY7xw", updatedAt: "2026-11-18T20:00:00Z" };
   const read = (path: string) => {
@@ -113,7 +113,7 @@ describe("TopBot formal release from desktop chat", () => {
 
   it.each([
     { time: 300_000 }, { prHead: moved }, { main: moved }, { draft: true }, { protected: false }, { baseRef: "other" },
-    { mergeSha: moved, main: moved, gate: { ...gate, sha: moved } }, { headRef: "topbot-dev/other" },
+    { mergeSha: moved, main: moved, gate: { ...gate, sha: moved } }, { headRef: "topbot-auto/other" },
     { gate: { ...gate, approval: 103 } }, { gate: { ...gate, ciRun: 55 } }, { gate: { ...gate, ciAttempt: 3 } },
     { ruleset: false }, { updatedAt: "2026-11-18T20:01:00Z" },
   ])("does not mutate if confirmation became stale: %o", async (change) => {

@@ -41,6 +41,7 @@ import { parseMentionPicks } from "../../shared/room-mentions.ts";
 import { pinnedClientThreadGuard } from "./pinned-client-thread.ts";
 import { refusalBody, userError } from "../user-errors.ts";
 import { chatReleaseCommand, type ChatReleaseHandler } from "../topbot-chat-release.ts";
+import { topBotIterationTask, type createTopBotIteration } from "../topbot-iteration.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 type RunningInstance = ReturnType<ProviderRegistry["get"]>;
@@ -71,6 +72,7 @@ export interface BotMessageRouteDeps {
   desktopManaged: boolean;
   cloudHome: boolean;
   topBotChatRelease?: ChatReleaseHandler;
+  topBotIteration?: ReturnType<typeof createTopBotIteration>;
   DirectSendRefused: abstract new (...args: never[]) => { readonly status: number; readonly body: Record<string, unknown> };
   acceptDirectSend(input: DirectSendInput, guardedStart?: (currentAtStart: BotRecord) => Promise<DirectSendReceipt>): Promise<DirectSendReceipt>;
   directSendRefusal(botId: string, threadId: string): { status: number; body: Record<string, unknown> } | null;
@@ -240,8 +242,9 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       const notYours = cloudGuestSendRefusal(auth, threadId);
       if (notYours) return json(res, 403, { error: notYours });
       const release = chatReleaseCommand(typed);
-      if (release) {
-        if (!deps.topBotChatRelease || auth.kind !== "loopback" || !auth.desktopOwner || fromPhone(auth) || guarded || body.mode === "goal" ||
+      const iteration = topBotIterationTask(typed);
+      if (release || iteration) {
+        if ((iteration ? !deps.topBotIteration : !deps.topBotChatRelease) || auth.kind !== "loopback" || !auth.desktopOwner || fromPhone(auth) || guarded || body.mode === "goal" ||
             body.replyToId || pointing || pageOpen || followUp || mentions?.length || body.dataContext || store.groupByThread(threadId)) {
           return json(res, 403, { error: "Release commands require a direct message from the local Windows TopBot desktop." });
         }
@@ -251,8 +254,10 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
         if (cached?.kind === "conflict") return json(res, 409, { error: "sendId already belongs to another message" });
         if (cached?.kind === "match") return json(res, 202, { ok: true, threadId, message: cached.message });
         const message = store.appendMessage(threadId, { role: "user", kind: "text", text: typed, sendId, sender: messageSender(auth) });
-        const report = await deps.topBotChatRelease(threadId, release);
-        if (store.taskByThread(bot.id, threadId)) store.appendMessage(threadId, { role: "bot", kind: "text", text: report });
+        const appendResult = (text: string) => {
+          if (store.taskByThread(bot.id, threadId)) store.appendMessage(threadId, { role: "bot", kind: "text", text });
+        };
+        appendResult(iteration ? deps.topBotIteration!(iteration.task, appendResult) : await deps.topBotChatRelease!(threadId, release!));
         return json(res, 202, { ok: true, threadId, message });
       }
       if (body.mode !== undefined && body.mode !== "chat" && body.mode !== "goal") return json(res, 400, { error: "mode must be chat or goal" });

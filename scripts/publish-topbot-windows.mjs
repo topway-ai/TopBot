@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { checkManifest, MANIFEST_NAME, REPOSITORY } from "../electron/topbot-release.mjs";
 import { normalizeTagRulesetProof, resolveTagRulesetProof, tagRulesetProof } from "./topbot-tag-ruleset.mjs";
 import { verifyWindowsReleaseGate } from "./topbot-release-gate.mjs";
+import { isNewerVersion } from "../electron/updater-coordinator.mjs";
 
 const repo = `/repos/${REPOSITORY}`;
 function requireState(condition, reason) {
@@ -95,8 +96,15 @@ export async function publishWindowsUpdate(directory, version, env, request) {
   }
 
   const policy = async () => verifyWindowsReleaseGate(
-    path => api(path, "GET", undefined, env.TOPBOT_RELEASE_POLICY_TOKEN), sha);
+    path => api(path, "GET", undefined, env.TOPBOT_RELEASE_POLICY_TOKEN), sha, undefined,
+    env.VERIFIED_CI_RUN ? Number(env.VERIFIED_CI_RUN) : undefined,
+    (env.TOPBOT_AUTOMATIC_MAIN_RULESETS ?? "").split(",").map(part => normalizeTagRulesetProof(part.trim())).filter(Boolean));
   const qualified = await policy();
+  const previous = await api(`${repo}/contents/package.json?ref=${qualified.base}`);
+  requireState(previous?.type === "file" && previous.encoding === "base64" && typeof previous.content === "string" &&
+    previous.content.length < 350_000, "Cannot verify the previous package version.");
+  const baseline = JSON.parse(Buffer.from(previous.content, "base64").toString("utf8")).version;
+  requireState(typeof baseline === "string" && isNewerVersion(version, baseline), "The release version did not increase relative to its parent.");
   await verifyProtection();
   await findOnlyRelease();
   // Create-only reservation. Even a same-SHA conflict or a lost success response is not ours to adopt.

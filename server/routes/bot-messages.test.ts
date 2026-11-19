@@ -165,6 +165,23 @@ async function fixture(over: Partial<Record<keyof BotMessageRouteDeps, unknown>>
 }
 
 describe("TopBot release chat commands", () => {
+  it("authorizes one automatic iteration only from direct local owner chat and keeps both results in the thread", async () => {
+    const topBotIteration = vi.fn((_task: string, report: (text: string) => void) => {
+      queueMicrotask(() => report("Iteration completed"));
+      return "Iteration started";
+    });
+    const shell = await fixture({ topBotIteration });
+    const desktop = await fixture({ topBotIteration }, true, true);
+    const text = "/topbot-iterate Improve the status panel";
+    expect((await shell.post({ text })).status).toBe(403);
+    const body = { text, threadId: desktop.threadId, sendId: SEND };
+    expect((await desktop.post(body)).status).toBe(202);
+    expect((await desktop.post(body)).status).toBe(202);
+    expect(topBotIteration).toHaveBeenCalledExactlyOnceWith("Improve the status panel", expect.any(Function));
+    expect(desktop.store.messagesFor(desktop.threadId).slice(-2).map(row => row.text)).toEqual(["Iteration started", "Iteration completed"]);
+    expect(desktop.state.accepted).toEqual([]);
+  });
+
   it("records an authenticated direct send and the deterministic response without running a model", async () => {
     const topBotChatRelease = vi.fn(async () => "Approved SHA preview");
     const { store, threadId, state, post } = await fixture({ topBotChatRelease }, true, true);
