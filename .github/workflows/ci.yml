@@ -522,7 +522,7 @@ jobs:
     # the deploy gap that left #1914's broker fix (45cc2cf) sitting in
     # source without reaching Cloudflare.
     needs: [control-plane]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.repository != 'topway-ai/TopBot' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: deploy composio broker (Cloudflare Worker)
     runs-on: ubuntu-latest
     timeout-minutes: 10

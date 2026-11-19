@@ -39,8 +39,9 @@ release. Keep the user's current app, profiles, keys and chats out of developmen
    dispatch a production workflow, change approvals, or overwrite the live app.
    The automatic lane accepts only plain `topbot-release-notes/<slug>.txt`
    and an exact package version bump. Use a version above installed and main;
-   after full CI and development checks both pass, tell the owner to send
-   `/topbot-release PR_NUMBER` in the Windows desktop chat after CI passes.
+   after independent approval, GitHub merge, and full CI on the merged
+   commit, tell the owner to send `/topbot-release PR_NUMBER` in the Windows
+   desktop chat. The chat confirmation cannot merge or bypass required review.
    Only the owner may send the one-time confirmation shown by the application.
    All other changes require independent review and a separate release operator.
    When done, `finish` archives the record without deleting the worktree or branch.

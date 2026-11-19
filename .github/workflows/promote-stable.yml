@@ -37,6 +37,7 @@ concurrency:
 
 jobs:
   promote:
+    if: github.repository != 'topway-ai/TopBot'
     name: Point stable at the release
     runs-on: ubuntu-24.04
     timeout-minutes: 15

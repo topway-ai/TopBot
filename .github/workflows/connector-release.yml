@@ -17,7 +17,7 @@ permissions:
 jobs:
   publish:
     name: publish to GHCR
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.repository != 'topway-ai/TopBot' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

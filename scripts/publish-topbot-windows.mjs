@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { checkManifest, MANIFEST_NAME, REPOSITORY } from "../electron/topbot-release.mjs";
 import { normalizeTagRulesetProof, resolveTagRulesetProof, tagRulesetProof } from "./topbot-tag-ruleset.mjs";
+import { verifyWindowsReleaseGate } from "./topbot-release-gate.mjs";
 
 const repo = `/repos/${REPOSITORY}`;
 function requireState(condition, reason) {
@@ -37,13 +38,15 @@ export async function publishWindowsUpdate(directory, version, env, request) {
     env.GITHUB_EVENT_NAME === "workflow_dispatch" && [env.GITHUB_ACTOR, env.GITHUB_TRIGGERING_ACTOR]
       .every(actor => actor?.toLowerCase() === owner) && /^[a-f0-9]{40}$/.test(sha) &&
     env.REVIEWED_SHA === sha && env.GH_TOKEN, "Publish requires the owner and the exact reviewed main SHA.");
+  requireState(typeof env.TOPBOT_RELEASE_POLICY_TOKEN === "string" && env.TOPBOT_RELEASE_POLICY_TOKEN.trim() &&
+    env.TOPBOT_RELEASE_POLICY_TOKEN !== env.GH_TOKEN, "Publish requires a separate read-only TOPBOT_RELEASE_POLICY_TOKEN.");
   const assets = await releaseAssets(directory, version);
 
-  async function api(path, method = "GET", data) {
+  async function api(path, method = "GET", data, token = env.GH_TOKEN) {
     const upload = data instanceof Blob;
     const response = await request(`https://${upload ? "uploads" : "api"}.github.com${path}`, {
       method, redirect: "error", signal: AbortSignal.timeout(upload ? 20 * 60_000 : 30_000),
-      headers: { authorization: `Bearer ${env.GH_TOKEN}`, accept: "application/vnd.github+json",
+      headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json",
         "x-github-api-version": "2022-11-28", "content-type": upload ? data.type : "application/json" },
       body: upload ? data : JSON.stringify(data),
     });
@@ -91,6 +94,9 @@ export async function publishWindowsUpdate(directory, version, env, request) {
       "Release assets differ from the qualified build.");
   }
 
+  const policy = async () => verifyWindowsReleaseGate(
+    path => api(path, "GET", undefined, env.TOPBOT_RELEASE_POLICY_TOKEN), sha);
+  const qualified = await policy();
   await verifyProtection();
   await findOnlyRelease();
   // Create-only reservation. Even a same-SHA conflict or a lost success response is not ours to adopt.
@@ -106,11 +112,19 @@ export async function publishWindowsUpdate(directory, version, env, request) {
   for (const asset of assets) await api(`${path}/assets?name=${asset.name}`, "POST", asset.body);
   verifyAssets((await findOnlyRelease(draft.id)).assets);
   await verifyProtection();
+  const finalGate = await policy();
+  for (const key of ["sha", "head", "base", "pullRequest", "ciRun", "ciAttempt", "approval"]) {
+    requireState(finalGate[key] === qualified[key], "Approved source, review or CI changed during release staging.");
+  }
+  // Tag guards close the tag race. Draft mutation is still restricted to trusted writers.
   await readTag();
-  // The server-side update/deletion rules, not this last read, close the ref race.
+  const finalDraft = await api(path);
+  requireState(finalDraft?.id === draft.id && finalDraft.tag_name === tag && finalDraft.draft === true,
+    "Draft ID, tag or visibility changed before publication.");
+  verifyAssets(finalDraft.assets);
   const published = await api(path, "PATCH", { ...binding, draft: false, prerelease: false, make_latest: "false" });
   requireState(published.id === draft.id && published.tag_name === tag && published.draft === false &&
-    published.prerelease === false, "Unexpected publication state; inspect manually.");
+    published.prerelease === false && published.immutable === true, "Unexpected or mutable publication state; inspect manually.");
   verifyAssets(published.assets);
   await readTag();
 }

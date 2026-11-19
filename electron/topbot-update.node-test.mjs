@@ -59,14 +59,22 @@ test("update protocol pins source, identity, compatibility and resource bounds",
 test("release selection rejects drafts and never uses a foreign manifest", async () => {
   const latest = manifest();
   const manifestUrl = `https://github.com/topway-ai/TopBot/releases/download/v${version}/topbot-windows-update.json`;
-  const release = { tag_name: `v${version}`, draft: false, prerelease: false, assets: [{ name: "topbot-windows-update.json", browser_download_url: manifestUrl }] };
+  const release = { tag_name: `v${version}`, draft: false, prerelease: false, immutable: true,
+    assets: [{ name: "topbot-windows-update.json", browser_download_url: manifestUrl }] };
   let calls = 0;
   const fetchImpl = async url => { calls++; return Response.json(url.includes("api.github") ? [release] : latest); };
   assert.equal((await findRelease({ current: "0.1.161-topbot.4", fetchImpl })).version, version);
   assert.equal(calls, 2);
   release.draft = true;
   assert.equal(await findRelease({ current: "0.1.161-topbot.4", fetchImpl }), null);
-  release.draft = false; release.assets[0].browser_download_url = "https://evil.test/manifest";
+  release.draft = false;
+  for (const immutable of [false, undefined]) {
+    release.immutable = immutable;
+    const before = calls;
+    assert.equal(await findRelease({ current: "0.1.161-topbot.4", fetchImpl }), null);
+    assert.equal(calls - before, 1);
+  }
+  release.immutable = true; release.assets[0].browser_download_url = "https://evil.test/manifest";
   await assert.rejects(findRelease({ current: "0.1.161-topbot.4", fetchImpl }), /Unexpected/);
 });
 

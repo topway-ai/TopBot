@@ -82,8 +82,11 @@ jobs:
       inputs.reviewed_sha == github.sha && needs.build.outputs.artifact_id != ''
     needs: build
     runs-on: ubuntu-latest
+    environment: topbot-windows-release
     permissions:
       contents: write
+      actions: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -102,6 +105,7 @@ jobs:
       - name: Publish only after the complete artifact is uploaded
         env:
           GH_TOKEN: ${{ github.token }}
+          TOPBOT_RELEASE_POLICY_TOKEN: ${{ secrets.TOPBOT_RELEASE_POLICY_TOKEN }}
           REVIEWED_SHA: ${{ inputs.reviewed_sha }}
           REVIEWED_TAG_RULESET: ${{ inputs.reviewed_tag_ruleset }}
         run: node source/scripts/publish-topbot-windows.mjs release

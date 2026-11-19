@@ -67,7 +67,7 @@ export async function findRelease(options = {}) {
   const response = await trustedFetch(`https://api.github.com/repos/${REPOSITORY}/releases?per_page=20`, { ...options, api: true });
   const releases = await boundedJson(response, 1024 * 1024);
   if (!Array.isArray(releases)) throw new Error("Invalid release listing.");
-  const candidates = releases.filter(r => !r.draft && !r.prerelease && typeof r.tag_name === "string" &&
+  const candidates = releases.filter(r => r?.immutable === true && r.draft === false && r.prerelease === false && typeof r.tag_name === "string" &&
     versionPattern.test(r.tag_name.replace(/^v/, "")) && isNewerVersion(r.tag_name.replace(/^v/, ""), options.current));
   candidates.sort((a, b) => isNewerVersion(a.tag_name, b.tag_name) ? -1 : 1);
   for (const release of candidates) {

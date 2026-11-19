@@ -279,7 +279,7 @@ describe("CI concurrency", () => {
       // not part of the merge gate.
       if (name === "deploy-composio-broker") {
         expect(job.needs).toEqual(["control-plane"]);
-        expect(job.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/main'");
+        expect(job.if).toBe("github.repository != 'topway-ai/TopBot' && github.event_name == 'push' && github.ref == 'refs/heads/main'");
         expect(workflow.jobs.gate.needs).not.toContain(name);
         // Without the Cloudflare token the deploy is skipped with a warning, not failed:
         // every step after the token check waits on it.

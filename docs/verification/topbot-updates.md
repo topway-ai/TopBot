@@ -4,7 +4,7 @@
 
 The Windows fork uses its own ZIP transaction runner, not the upstream NSIS
 auto-installer. `automaticUpdates` remains false for the legacy updater;
-`managedWindowsUpdates` enables this separate path. Only published, non-draft,
+`managedWindowsUpdates` enables this separate path. Only published, immutable,
 non-prerelease releases in `topway-ai/TopBot` with `topbot-windows-update.json`
 are eligible. A higher version is required. No GitHub credential is stored in
 the desktop app. SHA-256 detects corruption; trust in unsigned releases still
