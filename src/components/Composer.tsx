@@ -293,6 +293,8 @@ export function Composer({
   const effectiveText = typedGoalText ?? text;
   const effectiveChannelMode = typedGoalText !== null ? "goal" : channelMode;
   const engineSupportsImages = imageTargetsSupport(effectiveText, effectiveChannelMode);
+  const uploadVideo = !group && Boolean(bot && state.instances.find(instance => instance.instanceId === bot.modelSelection.instanceId)
+    ?.models.options.find(model => model.id === bot.modelSelection.model)?.videoReview);
 
   const slash = composerSlashTrigger(text, caret);
   const locale = activeLocale();
@@ -489,6 +491,7 @@ export function Composer({
     try {
       const { attachments: added, notice } = await intakeFilesWithNotice(Array.from(picked), {
         allowImages: engineSupportsImages,
+        uploadVideo,
         getPath: pathForFile,
         uploadImage,
         imageSlots: imageSlotsLeft(attachments),
@@ -750,6 +753,7 @@ export function Composer({
           onChangeCitation={(citation: CitationAttachment) => editAttachments((current) => current.map((attachment) => attachment.id === citation.id ? citation : attachment))}
           onDisplayInChatBox={displayPasteInChatBox}
           allowImages={engineSupportsImages}
+          uploadVideo={uploadVideo}
           notice={attachmentNotice}
           onNotice={setAttachmentNotice}
           onPendingChange={(pending) => changeDraftAttachmentPending(draftId, pending)}

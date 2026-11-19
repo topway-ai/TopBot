@@ -331,7 +331,7 @@ import { turnStartLogLine } from "./turn-log.ts";
 import { TurnStops, outwardActions, stoppedTurnOutcome, turnEvidence } from "./turn-outcome.ts";
 import { buildRecoveryText, buildTurnContext, engineIsFresh, replaysNatively } from "./turn-context.ts";
 import { Handoffs, handedStateUsable, isContextMessage, recordHanded, renderUnseen, sessionStart, unseenMessages, withUnseenMessages, type ContextMessage } from "./delta-context.ts"; import { isFreshStart, sinceFreshStart } from "./fresh-start.ts";
-import { extractReplayImages, extractTurnImages, videoFramesWithin } from "./turn-images.ts";
+import { extractReplayImages, extractTurnImages, videoFramesWithin, videoReviewQuestion } from "./turn-images.ts";
 import { callTitleExcerpt } from "./thread-title.ts";
 import { generateThreadTitle, llmThreadTitlesEnabled } from "./thread-title-generate.ts";
 import { engineCommandCpuMs, engineProcessExited, engineProcessGone, ENGINE_EXIT_STALL_MS, stallLimitMs, stallNotice, TurnWatchdog } from "./turn-watchdog.ts"; import { createIdleThreads } from "./host/idle-threads.ts";
@@ -7663,6 +7663,9 @@ async function beginTurn(
     || Boolean(opts?.unattended || opts?.cardContinuation || opts?.peerAsk || opts?.coordination || opts?.compactOnly || opts?.computerSelectionContinuation);
   const route = routeDirectTurn(bot, task, store.activePath(threadId), resolvedImages, instance, automated, quickFallback.refused(instance.instanceId));
   const { model, effort, variant } = route;
+  const localClip = !automated && !guestConfined && turnImages.length === 0 && instance.adapter.acceptsVideoReview?.(model)
+    ? resolvedImages.videos[0] : undefined;
+  const videoReview = localClip ? { video: localClip, question: videoReviewQuestion(text) } : undefined;
   assertModelVariantSupported({ variant, effort }, instance.adapter.capabilities);
   if (effort && !instance.adapter.capabilities.effortLevels?.includes(effort)) {
     throw Object.assign(
@@ -7794,7 +7797,7 @@ async function beginTurn(
         if (!readiness.ready) throw new Error(readiness.reason ?? "The cloud computer is not ready");
       }
       await warmSummaries.beforeTurn(threadId, () => directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId));
-      if (usesNativeImageInput && !opts?.compactOnly) turnImages.push(...await videoFramesWithin(turnImages.length, resolvedImages.videos));
+      if (usesNativeImageInput && !opts?.compactOnly && !videoReview) turnImages.push(...await videoFramesWithin(turnImages.length, resolvedImages.videos));
       await compactConversation({ bot, threadId, generation: dispatchClaimId, instance, model,
         excludedIds: new Set([userMessage.id, ...(opts?.excludeMessageIds ?? [])]), manual: opts?.compactOnly === true });
       if (!directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId)) throw new DirectTurnSetupCancelled("turn stopped during context setup");
@@ -8449,6 +8452,7 @@ async function beginTurn(
         text: withTurnClock(clock, withRecalled(recalled, (posted?.text ?? "") + attachmentsForBox(dispatchContext.turnText, cwd) + shareNote.text + devsReports.note(threadId, Boolean(integrations.agents)))),
         ...(recalled ? { recalled } : {}),
         images: dispatchContext.images,
+        ...(videoReview ? { videoReview } : {}),
         approvalMode: approvalModeForTurn(bot, commsDepth > 0, threadId),
         approvalModeNow: () => liveApprovalMode(bot, threadId, commsDepth > 0),
         toolScope,

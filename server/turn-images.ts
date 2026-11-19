@@ -178,6 +178,13 @@ export function videoFramesWithin(earlier: number, videos: readonly TurnVideoInp
   return videoFrameImages(videos, TURN_IMAGE_MAX_COUNT - earlier);
 }
 
+export function videoReviewQuestion(text: string): string {
+  for (const { start, end } of attachmentTagCandidates(text).sort((a, b) => b.start - a.start)) {
+    text = text.slice(0, start) + text.slice(end);
+  }
+  return text.trim();
+}
+
 export function extractSteerImages(
   texts: readonly string[],
   options: ExtractTurnImagesOptions = {},

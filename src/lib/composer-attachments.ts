@@ -387,6 +387,10 @@ export async function fileAttachmentFromFile(file: File, anyType = false): Promi
     ARCHIVE_MIMES_BY_EXTENSION[extension] ??
     (anyType ? declared || "application/octet-stream" : undefined);
   if (!mime) return null;
+  return uploadPrivateFile(file, mime);
+}
+
+async function uploadPrivateFile(file: File, mime: string): Promise<FileAttachment> {
   if (file.size > FILE_MAX_BYTES) throw new AttachError(file.name, FILE_MAX_BYTES);
   const uploadId = newUploadId();
   const saved = await uploadWithRetry<{ path: string; name: string; bytes: number }>(
@@ -778,6 +782,8 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
     allowImages: boolean;
     getPath: (file: T) => string;
     uploadImage: (file: T) => Promise<Attachment | null>;
+    /** A local video reader requires a private-store attachment, not the desktop's original path. */
+    uploadVideo?: boolean;
     /** `anyType` is set for a file nothing else takes, to upload it as a plain download. */
     uploadFile?: (file: T, anyType?: boolean) => Promise<FileAttachment | null>;
     /** Images the message can still take; the rest are left out and named in the notice. */
@@ -815,6 +821,11 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
       }
     }
     try {
+      if (_opts.uploadVideo && file.arrayBuffer) {
+        const ext = file.name.toLowerCase().split(".").at(-1);
+        const videoMime = ext === "mp4" || ext === "m4v" ? "video/mp4" : ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : undefined;
+        if (videoMime) return { attachments: [await uploadPrivateFile(file as unknown as File, videoMime)], rejectedNames: [] };
+      }
       const attachment = await uploadFile(file);
       if (attachment) {
         return { attachments: [attachment], rejectedNames: [] };

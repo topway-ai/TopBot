@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const base = path.resolve(process.argv[2] || path.join(process.env.LOCALAPPDATA, "Programs", "TopBot"));
 const ui = process.argv[3] ? path.resolve(process.argv[3]) : null;
 if (ui) await access(path.join(ui, "index.html"));
-const scratch = path.join(root, ".omb-scratch");
+const scratch = path.resolve(process.env.TOPBOT_LOCAL_BUILD_SCRATCH || path.join(root, ".omb-scratch"));
 await mkdir(scratch, { recursive: true });
 await resourcePreflight(scratch, 4 * 1024 ** 3);
 const out = await mkdtemp(path.join(scratch, "local-update-build-"));

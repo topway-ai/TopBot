@@ -37,6 +37,7 @@ import { classifyContinuable, writeTurnHandoff } from "../turn-continuation.ts";
 import { KEY_REJECTED_REASON, keyRejected, noteKeyAccepted, noteKeyRejected, rejectsKey } from "../key-rejections.ts";
 import { FETCH_LIMIT_MS, fetchPastLimit } from "./openai-chat-fetch.ts";
 import { announcesAction } from "./chat-announcement.ts";
+import { reviewLocalQwenVideo } from "./local-qwen-video.ts";
 
 export interface OpenAIChatMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -117,6 +118,7 @@ interface RuntimeOptions<Config> {
   computerUse?: boolean;
   /** A text-only model keeps the computer and browser tools but never receives a screenshot or attachment. */
   imageInput?: (model: string) => boolean;
+  videoReview?: (model: string) => boolean;
   /** Some models list `variants`; the picked one reaches `requestBody`. */ modelVariants?: boolean;
   /** False for a model its server says cannot call tools: its turns go without them instead of being refused. */ toolUse?: (model: string) => boolean;
   /** Why the server cannot answer now (not running, nothing to run), asked before the key is. */
@@ -226,6 +228,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     return reply;
   };
   const delivered = new Map<string, DeliveredUserMessage[]>();
+  let videoReviewRunning = false;
   /** Not cleared on `sessionReset`: with no cursor the harness sends it on nearly every turn. */
   const sessionGrants = new Map<string, Set<string>>();
 
@@ -522,11 +525,12 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
 
     const turnId = newId();
     const abort = new AbortController();
-    const messages = messagesFor(turn);
+    const model = turn.model || options.models().default;
+    const clip = options.videoReview?.(model) ? turn.videoReview : undefined;
+    const messages: OpenAIChatMessage[] = clip ? [{ role: "user", content: clip.question }] : messagesFor(turn);
     const request = messages.at(-1)!;
     const retainImages = chatImageBudget();
     for (const message of messages) retainImages(message.content);
-    const model = turn.model || options.models().default;
     const maskable = (value: unknown): value is string => typeof value === "string" && value.length >= 8; // a short placeholder key ("1") would redact every match
     const secrets = [options.apiKey].filter(maskable);
     for (const integration of Object.values(turn.integrations ?? {})) {
@@ -604,6 +608,22 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       const repeats = options.localModel ? new ChatRepeatGuard() : undefined;
       let unreadable = false, askedAgain = false;
       try {
+        if (clip) {
+          if (videoReviewRunning) throw new Error("Local Qwen is already analyzing a video. Wait for that clip to finish.");
+          turnEntry.ending = true;
+          videoReviewRunning = true;
+          try {
+            const result = await reviewLocalQwenVideo(clip, { apiUrl: options.apiUrl, apiKey: options.apiKey, model,
+              signal: abort.signal, onPass: (frames) => native("out", { model, mode: "local-video-review", frames }) });
+            abort.signal.throwIfAborted();
+            usage.input = result.usage.input;
+            usage.output = result.usage.output;
+            hasUsage = usage.input > 0 || usage.output > 0;
+            emit({ ...base(turn.threadId, turnId), type: "item.completed", itemType: "assistant_text", text: safeText(result.answer) });
+            ok = true;
+            return;
+          } finally { videoReviewRunning = false; }
+        }
         const parsed = parseToolScope(turn.toolScope);
         if (!parsed.ok) throw new Error(parsed.error);
         const scope = parsed.scope;
@@ -936,7 +956,9 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     displayName: input.displayName,
     enabled: input.enabled,
     get models() {
-      return options.models();
+      const catalog = options.models();
+      if (!options.videoReview || !catalog.options.some(model => options.videoReview?.(model.id))) return catalog;
+      return { ...catalog, options: catalog.options.map(model => options.videoReview?.(model.id) ? { ...model, videoReview: true as const } : model) };
     },
     ...(options.refreshModels ? { refreshModels: options.refreshModels } : {}),
     snapshot: async () => {
@@ -958,6 +980,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         queueing: true,
         ...(options.tools !== false ? { askTool: { kind: "native" as const, name: ASK_USER_TOOL } } : {}),
         guestTurns: "confined" },
+      ...(options.videoReview ? { acceptsVideoReview: options.videoReview } : {}),
       sendTurn,
       interruptTurn: async (threadId, turnId) => {
         const turn = active.get(threadId);

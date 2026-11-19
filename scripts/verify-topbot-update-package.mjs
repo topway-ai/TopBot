@@ -17,7 +17,7 @@ const build = JSON.parse(await readFile(path.join(packaged, "resources", "topbot
 const builder = createRequire(import.meta.resolve("electron-builder"));
 const asar = createRequire(builder.resolve("app-builder-lib"))("@electron/asar");
 const previousVersion = JSON.parse(asar.extractFile(path.join(previous, "resources", "app.asar"), "package.json").toString()).version;
-const scratch = path.join(root, ".omb-scratch");
+const scratch = path.resolve(process.env.TOPBOT_LOCAL_BUILD_SCRATCH || path.join(root, ".omb-scratch"));
 await mkdir(scratch, { recursive: true });
 const base = await mkdtemp(path.join(scratch, "update-package-"));
 const updates = process.argv.includes("--register-recovery")

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { TurnVideoInput } from "./contracts.ts";
-import { videoFrameImages } from "./turn-video.ts";
+import { localVideoSampler, videoFrameImages } from "./turn-video.ts";
 
 function hasFfmpeg(): boolean {
   try {
@@ -96,6 +96,26 @@ describe.skipIf(!hasFfmpeg())("video frame sampling", () => {
 
     expect(await videoFrameImages([clip], 3)).toHaveLength(3);
     expect(await videoFrameImages([clip], 0)).toEqual([]);
+  });
+
+  it("reuses three evenly spaced JPEGs inside the capped seven-frame local pass", async () => {
+    const sample = await localVideoSampler(syntheticClip(store(), 5), new AbortController().signal);
+    const sparse = await sample(3);
+    const dense = await sample(7);
+    expect(sparse.map(frame => frame.at)).toEqual([0, 2.375, 4.75]);
+    expect(dense.map(frame => frame.at)).toEqual([0, 0.792, 1.583, 2.375, 3.167, 3.958, 4.75]);
+    for (const [index, frame] of sparse.entries()) {
+      expect(dense[index * 3]).toBe(frame);
+      expect(frame.jpeg.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+    }
+  });
+
+  it("fails without reading past the local duration cap or sampling after cancellation", async () => {
+    await expect(localVideoSampler(syntheticClip(store(), 61, "64x64"), new AbortController().signal)).rejects.toThrow("60 seconds");
+    const abort = new AbortController();
+    const sample = await localVideoSampler(syntheticClip(store(), 3), abort.signal);
+    abort.abort();
+    await expect(sample(3)).rejects.toMatchObject({ name: "AbortError" });
   });
 
   it("never follows a playlist named as a video to the files it points at", async () => {

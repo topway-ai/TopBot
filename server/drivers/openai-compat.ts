@@ -7,6 +7,7 @@ import { lmStudioV1Catalog } from "./local-inject.ts";
 import { isContextName, isOllama, pickedName, serveWithWindow } from "./ollama-context.ts";
 import { isOllamaServer, OLLAMA_PLACEHOLDER_KEY, ollamaOrigin, ollamaUnavailable, onOllamaPort, probeOllama, thinkingEffort, type OllamaModel, type OllamaStatus } from "./ollama.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
+import { isLocalQwenVideoModel } from "./local-qwen-video.ts";
 import {
   freeDefault, freeFallbackCatalog, freeLabel, freeToolModels, freeToolsFirst, isOpenRouterOrigin, openRouterFreeTier,
   withOpenRouterTurns, type OpenRouterModelRow,
@@ -374,6 +375,7 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
       models: () => catalog,
       refreshModels: fetchModels,
       imageInput: (model) => fact(model)?.vision ?? true,
+      videoReview: (model) => isLocalQwenVideoModel(config.url, model) && fact(model)?.vision !== false,
       toolUse: (model) => fact(model)?.tools ?? true,
       ...(ollamaCandidate ? {
         serverUnavailable: async () => {

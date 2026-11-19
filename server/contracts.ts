@@ -92,7 +92,7 @@ export interface TurnImageInput {
   source?: "video-frame";
 }
 
-/** A video already admitted to the private attachment store; resolved into TurnImageInput frames before any driver sees it. */
+/** A video already admitted to the private attachment store. */
 export interface TurnVideoInput {
   path: string;
   mime: "video/mp4" | "video/webm" | "video/quicktime";
@@ -141,6 +141,8 @@ export interface SendTurnInput {
   confinedWhy?: string;
   /** Images for this user turn only; kept out of replay transcripts. */
   images?: TurnImageInput[];
+  /** An admitted clip and the person's question, for an adapter that samples video itself. */
+  videoReview?: { video: TurnVideoInput; question: string };
   model?: string;
   effort?: EffortLevel;
   variant?: string;
@@ -297,6 +299,7 @@ export interface ProviderAdapter {
     /** The tool the model asks the person with: its question and choices become a card they answer with a tap. */
     askTool?: ToolIdentity;
   };
+  acceptsVideoReview?(model: string): boolean;
   sendTurn(input: SendTurnInput): Promise<TurnStartResult>;
   interruptTurn(threadId: ThreadId, turnId?: TurnId): Promise<void>;
   /** Never throws for a vanished ask: `unavailable` means nobody could take the answer, and the caller treats it as a deny. */
@@ -493,6 +496,7 @@ export interface ModelCatalog {
     /** The installed CLI is too old for this model: the version it needs. */
     needsCliUpdate?: string;
     local?: LocalModelFacts;
+    videoReview?: true;
   }>;
 }
 

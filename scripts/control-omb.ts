@@ -2,9 +2,9 @@
 // The openmausbot headless verbs for verifying an isolated fixture. A verb that
 // changes something never runs on a server it merely found.
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs, type ParseArgsOptionsConfig } from "node:util";
 
@@ -165,6 +165,11 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     // The project's live announcement cards would sit over the corner the UI tests click in.
     OMB_DISABLE_ANNOUNCEMENTS: "1",
   });
+  const mediaBin = parentEnv.OMB_VERIFY_FFMPEG_DIR;
+  const suffix = process.platform === "win32" ? ".exe" : "";
+  if (mediaBin && isAbsolute(mediaBin) && ["ffmpeg", "ffprobe"].every(name => existsSync(join(mediaBin, name + suffix)))) {
+    childEnv.PATH += delimiter + mediaBin;
+  }
   // The fake engines' knobs are the one thing a caller may script into the child.
   for (const [key, value] of Object.entries(parentEnv)) {
     // FAKE_CLAUDE_DUMP stays the launcher's: assertions read fixtureDumpPath.
@@ -260,7 +265,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
 }
 
 /** The fixture hooks its environment asks for, then the server. */
-export function verificationServerArgs(childEnv: NodeJS.ProcessEnv): string[] {
+export function verificationServerArgs(childEnv: NodeJS.ProcessEnv, bundled = false): string[] {
   const hook = (file: string) => ["--import", pathToFileURL(join(ROOT, "server", "testing", file)).href];
   return [
     "--experimental-strip-types",
@@ -270,7 +275,7 @@ export function verificationServerArgs(childEnv: NodeJS.ProcessEnv): string[] {
     ...(childEnv.OMB_TEST_STALL_CLOCK === "1" ? hook("stall-clock-hooks.mjs") : []),
     ...(childEnv.OMB_TEST_RESUME_CLOCK === "1" ? hook("resume-clock-hooks.mjs") : []),
     ...(childEnv.OMB_TEST_MEMORY_GATE === "1" ? hook("memory-gate-hooks.mjs") : []),
-    join(ROOT, "server", "index.ts"),
+    bundled ? join(ROOT, "dist-server", "index.js") : join(ROOT, "server", "index.ts"),
   ];
 }
 
@@ -378,7 +383,7 @@ export async function launchVerificationServer(
   });
   if (boatFixtureApi) childEnv.OMB_BOAT_API = boatFixtureApi;
   if (staticDir) childEnv.OMB_STATIC_DIR = staticDir;
-  const child = spawn(process.execPath, verificationServerArgs(childEnv), {
+  const child = spawn(process.execPath, verificationServerArgs(childEnv, parentEnv.OMB_VERIFY_BUNDLED_SERVER === "1"), {
     cwd: ROOT,
     env: childEnv,
     stdio: ["ignore", log, log],

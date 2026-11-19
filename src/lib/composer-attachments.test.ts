@@ -15,6 +15,7 @@ import {
   fileAttachmentFromFile,
   handoffAttachmentImagePreview,
   imageAttachmentFromFile,
+  intakeFiles,
   isImageFile,
   optimisticImageAttachment,
   PREVIEW_MAX_BYTES,
@@ -510,6 +511,28 @@ describe("clipboardHasImages", () => {
 });
 
 describe("private document intake", () => {
+  it("uploads a desktop-picked local Qwen video instead of keeping its original path", async () => {
+    const video = new File(["clip"], "Clip.MP4", { type: "application/octet-stream" });
+    const getPath = vi.fn(() => "C:\\videos\\Clip.MP4");
+    const uploadImage = vi.fn(async () => null);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
+      path: "/private/attachments/clip.mp4", name: "Clip.MP4", bytes: video.size,
+    }), { status: 201, headers: { "content-type": "application/json" } }));
+    try {
+      const options = { allowImages: true, getPath, uploadImage };
+      const local = await intakeFiles([video], { ...options, uploadVideo: true });
+      expect(local.attachments).toMatchObject([{ path: "/private/attachments/clip.mp4" }]);
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/files\?/), expect.objectContaining({
+        headers: { "content-type": "video/mp4" }, body: video,
+      }));
+      expect(getPath).not.toHaveBeenCalled();
+      fetchMock.mockClear();
+      const ordinary = await intakeFiles([video], options);
+      expect(ordinary.attachments).toMatchObject([{ path: "C:\\videos\\Clip.MP4" }]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally { fetchMock.mockRestore(); }
+  });
+
   it.each([
     ["Voice note.opus", "", "audio/opus"],
     ["Voice note.opus", "audio/ogg; codecs=opus", "audio/ogg"],
