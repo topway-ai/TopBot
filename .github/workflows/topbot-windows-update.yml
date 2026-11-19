@@ -11,6 +11,10 @@ on:
         description: Full SHA of the reviewed main commit (required to publish)
         type: string
         default: ""
+      reviewed_tag_ruleset:
+        description: No-bypass tag ruleset verified by the owner (ID@updated_at, from the ruleset API)
+        type: string
+        default: ""
 permissions:
   contents: read
 concurrency:
@@ -21,6 +25,8 @@ jobs:
     if: github.repository == 'topway-ai/TopBot' && github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 60
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     env:
       NODE_OPTIONS: --max-old-space-size=3072
     steps:
@@ -31,11 +37,13 @@ jobs:
           REVIEWED_SHA: ${{ inputs.reviewed_sha }}
         run: |
           if ($env:GITHUB_ACTOR -ne $env:GITHUB_REPOSITORY_OWNER -or
+              $env:GITHUB_TRIGGERING_ACTOR -ne $env:GITHUB_REPOSITORY_OWNER -or
               $env:REVIEWED_SHA -cnotmatch '^[a-f0-9]{40}$' -or $env:REVIEWED_SHA -cne $env:GITHUB_SHA) {
             throw 'Publish requires the repository owner to dispatch the exact reviewed main commit.'
           }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -48,7 +56,7 @@ jobs:
       - name: Desktop menu, task pause and source size regression
         run: pnpm exec vitest run electron/managed-desktop-updates.test.mjs electron/updater.test.mjs server/move-freeze.test.ts server/move-freeze-thaw.test.ts scripts/testing/file-size-ratchet.test.ts scripts/patch-appimage-updater.test.mjs --maxWorkers=1 --testTimeout=120000
       - name: Verify chat release approvals and desktop authentication
-        run: pnpm exec vitest run server/topbot-chat-release.test.ts server/routes/bot-messages.test.ts server/request-auth.test.ts --maxWorkers=1
+        run: pnpm exec vitest run scripts/testing/topbot-release-publication.test.ts server/topbot-chat-release.test.ts server/routes/bot-messages.test.ts server/request-auth.test.ts --maxWorkers=1
       - run: pnpm package:win
       - name: Packaged server smoke test
         env:
@@ -58,34 +66,42 @@ jobs:
       - name: Qualify the release archive and hidden-window restart
         run: node scripts/verify-topbot-update-package.mjs release/win-unpacked release/win-unpacked --release-archive --hidden-candidate
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        id: artifact
         with:
-          name: topbot-windows-update
+          name: topbot-windows-update-${{ github.run_attempt }}
           path: |
             release/TopBot-*-x64.zip
             release/topbot-windows-update.json
           if-no-files-found: error
           retention-days: 14
   publish:
-    if: inputs.publish
+    # A retry can reuse a successful build without executing its approval step.
+    if: >-
+      inputs.publish && github.repository == 'topway-ai/TopBot' && github.ref == 'refs/heads/main' &&
+      github.actor == github.repository_owner && github.triggering_actor == github.repository_owner &&
+      inputs.reviewed_sha == github.sha && needs.build.outputs.artifact_id != ''
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: source
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          package-manager-cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: topbot-windows-update
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          digest-mismatch: error
           path: release
       - name: Publish only after the complete artifact is uploaded
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: topway-ai/TopBot
-        run: |
-          version=$(jq -r .version release/topbot-windows-update.json)
-          if gh release view "v$version" >/dev/null 2>&1; then
-            echo "Refusing to replace an existing release; bump the version first."
-            exit 1
-          fi
-          gh release create "v$version" --target "$GITHUB_SHA" --draft --title "TopBot $version" --notes "Windows update with program backup, health checks and rollback. Data format epoch 1."
-          gh release upload "v$version" release/TopBot-*-x64.zip release/topbot-windows-update.json
-          gh release edit "v$version" --draft=false --prerelease=false --latest=false
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          REVIEWED_TAG_RULESET: ${{ inputs.reviewed_tag_ruleset }}
+        run: node source/scripts/publish-topbot-windows.mjs release

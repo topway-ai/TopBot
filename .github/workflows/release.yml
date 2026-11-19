@@ -50,6 +50,8 @@ permissions:
 
 jobs:
   prepare:
+    # TopBot releases are owned exclusively by topbot-windows-update.yml.
+    if: github.repository != 'topway-ai/TopBot'
     name: Pin the release commit
     runs-on: ubuntu-24.04
     timeout-minutes: 5

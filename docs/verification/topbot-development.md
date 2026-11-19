@@ -4,8 +4,8 @@ The explicit trigger is `/topbot-development` or `TopBot development`.
 The chat can check readiness, prepare a change
 in a separate worktree, run focused checks and open a draft pull request.
 It cannot merge, publish, install or edit the running application through this
-controller. A draft can contain protected paths, but calls them out for owner
-review. CodeGraph is optional and provides context, not publish authority.
+controller. Source or workflow edits stay local for independent review before
+any same-repository push. CodeGraph provides context, not publish authority.
 
 ## Local Setup
 
@@ -26,6 +26,11 @@ Windows on GitHub. The threshold is a preflight, not a hard OS resource limit.
 `draft` depends on authorized Windows Git Credential Manager access for
 `topway-ai`. The controller uses it only for the pinned repository, verifies
 the GitHub account and exact draft SHA, and never writes or prints its token.
+For eligible edits, it reconstructs the reviewed tree from the remote base
+and inspected file objects, and pushes a one-commit snapshot. Original
+development commits, messages and intermediate files are not sent.
+Published job branches are immutable. For a revision, start a new job with
+a new slug. A retry may report the same matching draft, not overwrite it.
 It has no release operation. That is a restriction of this controller, not
 a sandbox for a bot granted unrestricted shell or browser access. Enforce
 repository permissions and protected paths separately; never give the routine
@@ -40,19 +45,44 @@ Review that candidate, then send the displayed `/topbot-publish CODE` in the
 same chat within five minutes. Only the last preview is active; restarting
 TopBot invalidates it. The command runs on the server without calling the AI.
 
-One confirmation can mark a draft ready, merge the approved head, and queue
-**TopBot Windows Update** for the verified merge SHA. The first confirmation
+One confirmation can fast-forward an unprotected `refs/heads/main` from
+the exact approved base to its approved single child and queue **TopBot
+Windows Update** for that SHA. GitHub checks both ref leases atomically;
+there is no force update or fallback to merging a mutable PR. The write
+destination is always main, never a branch chosen by a retargeted PR.
+Protected branches must go through their normal review process. Both full
+PR CI and the development checks must be green. The first confirmation
 consumes the approval. If the PR or CI result changes, start over. If a network
 error follows a GitHub write, check the PR and Actions links before retrying:
 TopBot does not repeat writes with unknown outcomes. The Actions job packages
 and verifies Windows in CI; a queued build is not a published release.
 
-Chat release currently allows only Markdown under `docs`, source CSS,
-translations, and a version-only `package.json` change. The version must
+The automatic lane accepts plain non-executable notes named
+`topbot-release-notes/<lowercase-slug>.txt` and a version-only
+`package.json` change. Code, styles, rendered documentation, translations
+and CI inputs are not treated as inert files. The version must
 advance beyond main and the installed app. Other changes (including the
 initial rollout of this release feature) require independent maintainer review.
 For those, the repository owner can dispatch the release workflow separately
 after merging, using `publish: true` and the reviewed main SHA.
+
+Before either release path can publish, configure an active repository **tag**
+ruleset covering `refs/tags/v*` (no exclusions or bypass actors). Restrict
+updates and deletions, not creation. The owner must be able to read the full
+rule, including its bypass list. Chat reads it at preview and again at
+confirmation and passes its ID and revision to the workflow. A missing rule
+is a stop condition, not permission to publish an unprotected tag. For a
+manual dispatch use the verified `ID@updated_at` as `reviewed_tag_ruleset`.
+Creating repository rules is an explicit owner operation; the app does not do it.
+If a publication stops after reserving its tag, inspect the tag and draft
+before choosing a new version. Retries do not reclaim a pre-existing tag.
+Tag protection does not sign release binaries or remove a repository
+administrator's ability to change release policy.
+The upstream multi-platform release, npm publishing and legacy mirror writers
+are disabled for this fork. Do not grant other automations release write access.
+These guards apply to workflow revisions containing them, not historical runs.
+Before the first production dispatch, review existing Actions runs and other
+write credentials; do not rerun old release workflows.
 
 The desktop verifies the `topway-ai` GitHub identity with the existing Windows
 Git Credential Manager and accepts commands only through the authenticated

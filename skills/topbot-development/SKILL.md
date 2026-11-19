@@ -27,16 +27,19 @@ release. Keep the user's current app, profiles, keys and chats out of developmen
    intended source and tests. Do not stage chats, logs, settings, credentials,
    model files, local paths, build output or test copies. Commit the change on
    the job branch, then run `review` again. Protected paths require independent
-   owner review; the controller refuses private or unsupported files outright.
+   owner review before any push. Keep code, workflow edits, styles, translations
+   and rendered documentation local for that review. Do not push them yourself.
 5. When asked to open a PR, run `draft`. It uses existing Windows GitHub
-   authorization without showing it to the model, pushes only the job branch,
+   authorization without showing it to the model, pushes a sanitized snapshot
+   (not your local commit history) only to the job branch,
    and opens or verifies a GitHub draft against `main`. Report the URL, exact
    commit, passed checks, and any protected paths. If authorization fails,
    report it; do not request tokens in chat or fall back to a wider credential.
 6. Stop at the draft. Never merge, tag, publish, touch main from the job,
    dispatch a production workflow, change approvals, or overwrite the live app.
-   For docs, styles or translations prepared for a release, bump only the
-   package version above installed and main versions and tell the owner to send
+   The automatic lane accepts only plain `topbot-release-notes/<slug>.txt`
+   and an exact package version bump. Use a version above installed and main;
+   after full CI and development checks both pass, tell the owner to send
    `/topbot-release PR_NUMBER` in the Windows desktop chat after CI passes.
    Only the owner may send the one-time confirmation shown by the application.
    All other changes require independent review and a separate release operator.

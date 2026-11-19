@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmdirSync, statfsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, rmdirSync, statfsSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,11 +10,13 @@ const baseRef = "refs/remotes/origin/main";
 const GiB = 1024 ** 3;
 const sha = /^[a-f0-9]{40}$/;
 const slug = /^[a-z0-9][a-z0-9-]{0,39}$/;
-const protectedPath = /^(?:\.github\/|AGENTS\.md$|electron\/|scripts\/(?:topbot-|close-legacy-|install-|package-|verify-topbot-)|skills\/topbot-development\/|server\/(?:request-auth|permissions|.*migration|sessions|config|harness\/registry|move-freeze))/i;
-const privatePath = /(?:^|\/)(?:\.env(?:\.|$)|\.openmausbot(?:\/|$)|\.omb-scratch(?:\/|$)|node_modules\/|dist(?:-[^/]+)?\/|release\/|performance-results\/|credentials?(?:\.|\/)|secrets?(?:\.|\/))|\.(?:key|pem|pfx|sqlite3?|db|gguf|log|zip|exe)$/i;
-const allowedSource = /\.(?:[cm]?[jt]sx?|ya?ml|json|mdx?|css|html?|svg|toml|lock|txt|cmd|ps1|sh)$/i;
+const notePath = /^topbot-release-notes\/[a-z0-9][a-z0-9-]{0,39}\.txt$/;
+const version = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-topbot\.(?:0|[1-9]\d*))?$/;
+const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const secret = /(?:gh[pousr]_[a-zA-Z0-9]{30,}|github_pat_[a-zA-Z0-9_]{35,}|sk-(?:proj-)?[a-zA-Z0-9_-]{40,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----)/;
 const privateReference = /(?:[A-Z]:\\(?:Users|ProgramData)\\|\/home\/[^/\s]+\/\.openmausbot\/)/i;
+const repositoryEnv = new Set(["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_SHALLOW_FILE", "GIT_GRAFT_FILE", "GIT_NAMESPACE", "GIT_QUARANTINE_PATH"]);
 
 function objectFile(file) { return JSON.parse(readFileSync(file, "utf8")); }
 function atomicJson(file, value) {
@@ -23,14 +25,16 @@ function atomicJson(file, value) {
   renameSync(pending, file);
 }
 
-export function gitAt(cwd, args, { input, hidden = false } = {}) {
+export function gitAt(cwd, args, { input, hidden = false, binary = false } = {}) {
   try {
-    return execFileSync("git", args, { cwd, input, encoding: "utf8", timeout: 120_000, windowsHide: true,
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !repositoryEnv.has(key.toUpperCase())));
+    const output = execFileSync("git", args, { cwd, input, timeout: 120_000, windowsHide: true,
       maxBuffer: 2 * 1024 * 1024, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "Never" } });
+      env: { ...env, GIT_NO_REPLACE_OBJECTS: "1", GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "Never" } });
+    return binary ? output : utf8.decode(output);
   } catch (error) {
     if (hidden) throw new Error("GitHub credentials are unavailable. Authorize the repository's account outside the bot chat.");
-    throw new Error(`git ${args[0]} failed: ${String(error.stderr ?? "").trim().slice(-900) || error.code || error.status}`);
+    throw new Error(`git ${args[0]} failed: ${String(error.stderr ?? "").trim().slice(-900) || error.code || error.message}`);
   }
 }
 
@@ -39,27 +43,98 @@ function samePath(a, b) {
   return canonical(a) === canonical(b);
 }
 
-export function analyzeFiles(worktree, files, addedLines = "") {
-  const blocked = [], ownerReview = [];
-  for (const file of files) {
-    if (privatePath.test(file) || !allowedSource.test(file) || [...file].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
-      blocked.push({ file, reason: "Outside the text source allowlist" });
-      continue;
-    }
-    if (protectedPath.test(file)) ownerReview.push(file);
-    const absolute = path.resolve(worktree, file);
-    if (!absolute.startsWith(worktree + path.sep)) { blocked.push({ file, reason: "Outside the worktree" }); continue; }
-    if (existsSync(absolute)) {
-      const info = lstatSync(absolute);
-      if (!info.isFile() || !realpathSync(absolute).startsWith(worktree + path.sep)) {
-        blocked.push({ file, reason: "Linked or non-regular path" });
-      } else if (info.size > 1024 ** 2 || readFileSync(absolute).includes(0)) {
-        blocked.push({ file, reason: "Large or binary file" });
+function versionOnly(before, after) {
+  let previous, next;
+  try { previous = JSON.parse(before).version; next = JSON.parse(after).version; } catch { return false; }
+  return typeof previous === "string" && typeof next === "string" && next.length <= 64 &&
+    version.test(next) && next !== previous &&
+    before.replace(/("version"\s*:\s*)"[^"\\]*"/, (_, key) => key + JSON.stringify(next)) === after;
+}
+
+function readTextBlob(run, oid) {
+  if (Number(run(["cat-file", "-s", oid])) > 1024 ** 2) throw new Error("Large blob");
+  const bytes = run(["cat-file", "blob", oid], { binary: true });
+  return { bytes, text: utf8.decode(bytes) };
+}
+
+function rawChanges(run, base, tree) {
+  return run(["diff-tree", "-r", "--raw", "--no-commit-id", "--no-renames", "--no-abbrev",
+    "--ignore-submodules=none", "-z", base, tree, "--"]);
+}
+
+function inspectTree(run, changes) {
+  const fields = changes.split("\0");
+  if (fields.pop() !== "" || fields.length % 2) throw new Error("Invalid Git tree diff.");
+  const files = [], blocked = [], edits = [];
+  let total = 0;
+  for (let i = 0; i < fields.length; i += 2) {
+    const file = fields[i + 1];
+    files.push(file);
+    try {
+      if (!notePath.test(file) && file !== "package.json") throw new Error("Outside the static release-note and version allowlist");
+      const record = /^:(000000|100644) (000000|100644) ([0-9a-f]{40}) ([0-9a-f]{40}) ([AMD])$/.exec(fields[i]);
+      if (!record) throw new Error("Not an ordinary non-executable file change");
+      const [, , mode, old, oid, status] = record;
+      const blob = status === "D" ? null : readTextBlob(run, oid);
+      total += blob?.bytes.length ?? 0;
+      if (total > 2 * 1024 ** 2) throw new Error("Draft exceeds the text limit");
+      if (file === "package.json") {
+        const previous = status === "M" && readTextBlob(run, old);
+        if (!previous || run(["hash-object", "--stdin"], { input: previous.bytes }).trim() !== old ||
+            !versionOnly(previous.text, blob.text)) throw new Error("Only the existing package version may change");
+      } else if (blob && (/[^\P{Cc}\t\n\r]/u.test(blob.text) || secret.test(blob.text) || privateReference.test(blob.text))) {
+        throw new Error("Binary text, possible credential or private machine path in note");
       }
-    }
+      edits.push({ file, oid, mode, bytes: blob?.bytes });
+    } catch (error) { blocked.push({ file, reason: error.message }); }
   }
-  if (secret.test(addedLines) || privateReference.test(addedLines)) blocked.push({ reason: "Possible credential or private machine path in added lines" });
-  return { blocked, ownerReview };
+  return { files, blocked, edits };
+}
+
+function createSnapshotBranch(git, home, job, tree, changes, edits, reserve) {
+  const stage = mkdtempSync(path.join(home, "snapshot-"));
+  const run = (args, options) => git(stage, args, options);
+  try {
+    run(["init", "--bare", "--template="]);
+    run(["fetch", "--no-tags", "--no-recurse-submodules", "--depth=1", "--filter=blob:none", origin, "refs/heads/main"]);
+    if (run(["rev-parse", "FETCH_HEAD^{commit}"]).trim() !== job.base) throw new Error("Draft blocked: the job base is not current GitHub main.");
+    run(["read-tree", job.base]);
+    for (const { oid, bytes } of edits) {
+      if (bytes && run(["hash-object", "-w", "--stdin"], { input: bytes }).trim() !== oid) throw new Error("Draft blob identity mismatch.");
+    }
+    run(["update-index", "-z", "--index-info"], { input: edits.map(e => `${e.mode} ${e.oid}\t${e.file}\0`).join("") });
+    // Check both sides of every edit against the independently fetched base, without hydrating base blobs.
+    if (run(["write-tree", "--missing-ok"]).trim() !== tree || rawChanges(run, job.base, tree) !== changes) {
+      throw new Error("Draft blocked: the approved blobs do not reconstruct the reviewed changes.");
+    }
+
+    // Deterministic metadata makes retrying idempotent without copying any source commit headers.
+    const time = run(["show", "-s", "--format=%ct", job.base]).trim();
+    if (!/^\d+$/.test(time)) throw new Error("Invalid main commit timestamp.");
+    const identity = `TopBot Development <topbot-development@users.noreply.github.com> ${time} +0000`;
+    const input = `tree ${tree}\nparent ${job.base}\nauthor ${identity}\ncommitter ${identity}\n\nReviewed TopBot draft\n`;
+    const snapshot = run(["hash-object", "-t", "commit", "-w", "--stdin"], { input }).trim();
+    if (!sha.test(snapshot)) throw new Error("Invalid snapshot commit.");
+    const ref = `refs/heads/${job.branch}`;
+    const advertised = run(["ls-remote", "--refs", origin, ref]).trimEnd();
+    if (advertised) throw new Error("Draft branch already exists; manual recovery required. Do not reuse this head.");
+    const refspec = `${snapshot}:${ref}`;
+    // Consume the slug before the write: a lost response cannot authorize another push.
+    reserve(snapshot);
+    const output = run(["push", "--porcelain", "--no-verify", "--no-follow-tags", "--no-thin", "--recurse-submodules=no",
+      `--force-with-lease=${ref}:`, origin, refspec]);
+    const updates = output.split(/\r?\n/).filter(line => line.includes("\t"));
+    if (updates.length !== 1 || !updates[0].startsWith(`*\t${refspec}\t`)) throw new Error("Git did not confirm creation of a new branch.");
+    return snapshot;
+  } finally { rmSync(stage, { recursive: true, force: true }); }
+}
+
+const positiveId = value => Number.isSafeInteger(value) && value > 0;
+function matchesDraft(pr, job, snapshot) {
+  return positiveId(pr?.id) && positiveId(pr.number) && pr.state === "open" && pr.draft === true &&
+    pr.html_url === `https://github.com/${repo}/pull/${pr.number}` &&
+    pr.base?.repo?.full_name === repo && pr.base.ref === "main" && pr.base.sha === job.base &&
+    pr.head?.repo?.full_name === repo && pr.head.ref === job.branch && pr.head.sha === snapshot;
 }
 
 function authenticatedGitHub(checkout, request = fetch) {
@@ -104,22 +179,29 @@ export async function runDevelopment(args, { home = path.join(os.homedir(), ".to
     if (r.freeRAM < r.minimumRAM || r.freeDisk < r.minimumDisk) throw new Error("Development paused: need 3 GiB free RAM and 6 GiB free staging disk.");
   };
   const review = job => {
-    if (!job || !slug.test(job.slug) || job.branch !== `topbot-dev/${job.slug}` || !sha.test(job.base)) throw new Error("No valid active development job.");
+    if (!job || !slug.test(job.slug) || job.branch !== `topbot-dev/${job.slug}` || !sha.test(job.base) ||
+        (job.published !== undefined && !sha.test(job.published))) throw new Error("No valid active development job.");
     const candidate = path.join(root, job.slug);
     if (!samePath(candidate, job.path) || !samePath(candidate, git(candidate, ["rev-parse", "--show-toplevel"]).trim()) ||
         git(candidate, ["branch", "--show-current"]).trim() !== job.branch ||
         git(candidate, ["remote", "get-url", "--push", "origin"]).trim() !== origin) throw new Error("The active worktree or its push target no longer matches the job.");
-    git(candidate, ["merge-base", "--is-ancestor", job.base, "HEAD"]);
-    const files = [...new Set([git(candidate, ["diff", "--name-only", "--no-renames", "-z", job.base, "--"]),
-      git(candidate, ["ls-files", "--others", "--exclude-standard", "-z"])].join("").split("\0").filter(Boolean))].sort();
-    const lines = git(candidate, ["diff", "--no-ext-diff", "--no-renames", "--unified=0", job.base, "--"])
-      .split("\n").filter(line => line.startsWith("+") && !line.startsWith("+++")).join("\n");
-    const dirty = Boolean(git(candidate, ["status", "--porcelain", "--untracked-files=all"]).trim());
-    return { ...job, head: git(candidate, ["rev-parse", "HEAD"]).trim(), dirty, files, ...analyzeFiles(candidate, files, lines) };
+    const run = (args, options) => git(candidate, args, options);
+    const head = run(["rev-parse", "HEAD^{commit}"]).trim();
+    if (!sha.test(head)) throw new Error("Invalid source commit.");
+    run(["merge-base", "--is-ancestor", job.base, head]);
+    const tree = run(["rev-parse", `${head}^{tree}`]).trim();
+    const changes = rawChanges(run, job.base, tree);
+    const { files, blocked, edits } = inspectTree(run, changes);
+    const dirty = Boolean(run(["--no-optional-locks", "status", "--porcelain=v1", "-z", "--ignore-submodules=none", "--untracked-files=all"]));
+    if (dirty) {
+      const pending = [run(["diff", "--name-only", "--no-renames", "-z", head, "--"]), run(["ls-files", "--others", "--exclude-standard", "-z"])];
+      files.push(...pending.join("").split("\0").filter(Boolean));
+    }
+    return { tree, changes, edits, report: { ...job, head, dirty, files: [...new Set(files)].sort(), blocked, ownerReview: [] } };
   };
   if (command === "doctor") return { repository: repo, checkout: repoRoot, worktrees: root, active: state(), resources: resources(),
     localBuilds: "focused tests only; Windows packaging belongs on GitHub Actions", release: "not available through this controller" };
-  if (command === "review") return review(state());
+  if (command === "review") return review(state()).report;
 
   const lock = path.join(home, "operation.lock");
   try { mkdirSync(lock); } catch { throw new Error("Another development operation is active. Inspect the job instead of removing its lock."); }
@@ -128,6 +210,7 @@ export async function runDevelopment(args, { home = path.join(os.homedir(), ".to
     const job = state();
     if (command === "start") {
       if (job) throw new Error(`Finish the active ${job.branch} job before starting another.`);
+      if (existsSync(path.join(home, `${value}.json`))) throw new Error("This job slug was already used; choose a new slug.");
       const candidate = path.join(root, value);
       if (existsSync(candidate)) throw new Error("The job directory already exists; choose a different slug.");
       localGit("fetch", "--no-tags", "origin", `refs/heads/main:${baseRef}`);
@@ -138,7 +221,7 @@ export async function runDevelopment(args, { home = path.join(os.homedir(), ".to
       atomicJson(stateFile, created);
       return { ...created, resources: resources() };
     }
-    const checked = review(job);
+    const { report: checked, changes, edits, tree } = review(job);
     if (checked.dirty) throw new Error("The development worktree still has uncommitted changes.");
     if (command === "finish") {
       const archived = path.join(home, `${job.slug}.json`);
@@ -146,22 +229,63 @@ export async function runDevelopment(args, { home = path.join(os.homedir(), ".to
       renameSync(stateFile, archived);
       return { archived, worktreeRetained: job.path };
     }
+    if (job.published !== undefined || job.publishedTree !== undefined || job.pull !== undefined) {
+      if (!sha.test(job.published) || !sha.test(job.publishedTree) || !positiveId(job.pull?.id) || !positiveId(job.pull?.number)) {
+        throw new Error("Publication has no complete receipt; manual recovery required. No further publication is permitted.");
+      }
+      if (tree !== job.publishedTree) throw new Error("This slug already published an immutable snapshot. Start a new job for changed work.");
+    }
     if (checked.blocked.length || !checked.files.length || checked.head === job.base || !sha.test(checked.head)) throw new Error("Draft blocked: inspect review for unsupported paths, secrets, or an empty diff.");
-    git(job.path, ["diff", "--check", job.base, "--"]);
+    git(job.path, ["diff", "--no-ext-diff", "--no-textconv", "--check", job.base, checked.head, "--"]);
     const github = connect(repoRoot);
     const identity = await github("/user");
     if (identity.login !== "topway-ai") throw new Error("GitHub selected an account other than topway-ai; nothing was published.");
-    git(job.path, ["push", "origin", `${checked.head}:refs/heads/${job.branch}`]);
-    const query = new URLSearchParams({ head: `topway-ai:${job.branch}`, base: "main", state: "open" });
+    // No base filter: even one additional PR for another target makes this head ambiguous.
+    const query = new URLSearchParams({ head: `topway-ai:${job.branch}`, state: "open", per_page: "2" });
     const pullPath = `/repos/${repo}/pulls`;
-    const current = (await github(`${pullPath}?${query}`))[0];
-    const result = current ?? await github(pullPath, { base: "main", head: job.branch, draft: true,
-      title: job.slug.replaceAll("-", " "),
-      body: `Prepared from \`${job.base}\` for review. No release was requested.\n\n${checked.ownerReview.length ? "**Independent owner review requested:** this change touches protected development, update or security paths." : "Review the diff and test evidence before marking the draft ready."}` });
-    if (!result.draft || result.head?.sha !== checked.head || !Number.isSafeInteger(result.number) || result.html_url !== `https://github.com/${repo}/pull/${result.number}`) {
-      throw new Error("GitHub did not confirm a draft for the reviewed commit. Do not authorize release.");
+    const openPulls = async () => {
+      const pulls = await github(`${pullPath}?${query}`);
+      if (!Array.isArray(pulls)) throw new Error("Invalid open PR listing; manual recovery required.");
+      return pulls;
+    };
+    const checkRemote = snapshot => {
+      const ref = `refs/heads/${job.branch}`;
+      if (localGit("ls-remote", "--refs", origin, ref) !== `${snapshot}\t${ref}`) throw new Error("Published head is missing or changed; manual recovery required.");
+    };
+    const confirm = (pulls, snapshot, receipt) => {
+      const [pr] = pulls;
+      if (pulls.length !== 1 || !matchesDraft(pr, job, snapshot) || pr.id !== receipt.id || pr.number !== receipt.number) {
+        throw new Error("The original draft is missing, changed or ambiguous; manual recovery required.");
+      }
+      return { draft: pr.html_url, head: snapshot, ownerReview: checked.ownerReview, release: "not requested" };
+    };
+    const before = await openPulls();
+    if (job.published) {
+      checkRemote(job.published);
+      return confirm(before, job.published, job.pull);
     }
-    return { draft: result.html_url, head: checked.head, ownerReview: checked.ownerReview, release: "not requested" };
+    if (before.length) throw new Error("An open PR already uses this head; manual recovery required.");
+    let pending;
+    try {
+      const snapshot = createSnapshotBranch(git, home, job, tree, changes, edits, published => {
+        pending = { ...job, published, publishedTree: tree };
+        atomicJson(stateFile, pending);
+      });
+      checkRemote(snapshot);
+      if ((await openPulls()).length) throw new Error("An open PR appeared for the new head.");
+      const created = await github(pullPath, { base: "main", head: job.branch, draft: true,
+        title: job.slug.replaceAll("-", " "),
+        body: `Prepared from \`${job.base}\` for review. No release was requested.\n\nReview the diff and test evidence before marking the draft ready.` });
+      if (!matchesDraft(created, job, snapshot)) throw new Error("GitHub did not confirm the requested draft.");
+      const pull = { id: created.id, number: created.number };
+      checkRemote(snapshot);
+      const result = confirm(await openPulls(), snapshot, pull);
+      atomicJson(stateFile, { ...pending, pull });
+      return result;
+    } catch (error) {
+      if (pending) throw new Error(`Publication not confirmed; manual recovery required. ${error.message}`);
+      throw error;
+    }
   } finally { rmdirSync(lock); }
 }
 
