@@ -125,6 +125,17 @@ describe("publish the qualified Windows build", () => {
       expect(gh.writes).toEqual([]);
     }
   });
+  it("compares an owner-entered offset proof against the redacted UTC revision", async () => {
+    const { bypass_actors: _redacted, ...redacted } = rule;
+    const guard = () => github(call => call === "GET rulesets/42"
+      ? json({ ...redacted, updated_at: "2026-11-18T20:00:00.035Z" }) : undefined);
+    await guard().run({ ...ownerRun, REVIEWED_TAG_RULESET: "42@2026-11-18T15:00:00.035-05:00" });
+    for (const supplied of ["42@2026-11-18T15:00:00.036-05:00", "42@2026-11-18T15:00:00.035+99:00"]) {
+      const gh = guard();
+      await expect(gh.run({ ...ownerRun, REVIEWED_TAG_RULESET: supplied })).rejects.toThrow(/ruleset/);
+      expect(gh.writes).toEqual([]);
+    }
+  });
   it.each([{ GITHUB_ACTOR: "writer" }, { GITHUB_TRIGGERING_ACTOR: "writer" }, { GITHUB_TRIGGERING_ACTOR: "" },
     { REVIEWED_SHA: sha.toUpperCase() }, { GITHUB_REF: "refs/heads/dev" }, { GITHUB_REPOSITORY: "other/TopBot" }])(
     "rejects unapproved run context %o before contacting GitHub", async change => {

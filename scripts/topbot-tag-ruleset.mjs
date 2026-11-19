@@ -15,6 +15,13 @@ function utcRevision(value) {
   return new Date(time).toISOString().replace(/\.000Z$/, digits ? `.${digits}Z` : "Z");
 }
 
+export function normalizeTagRulesetProof(value) {
+  const match = typeof value === "string" && /^([1-9]\d*)@(.+)$/.exec(value);
+  if (!match || !Number.isSafeInteger(Number(match[1]))) return null;
+  const revision = utcRevision(match[2]);
+  return revision ? `${match[1]}@${revision}` : null;
+}
+
 export function tagRulesetProof(rule, tagName, ownerProof = "") {
   if (typeof tagName !== "string" || !tagPattern.test(tagName) || !Number.isSafeInteger(rule?.id) || rule.id <= 0 ||
       rule.source_type !== "Repository" || rule.source !== repository ||

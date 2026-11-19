@@ -4,7 +4,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { checkManifest, MANIFEST_NAME, REPOSITORY } from "../electron/topbot-release.mjs";
-import { resolveTagRulesetProof, tagRulesetProof } from "./topbot-tag-ruleset.mjs";
+import { normalizeTagRulesetProof, resolveTagRulesetProof, tagRulesetProof } from "./topbot-tag-ruleset.mjs";
 
 const repo = `/repos/${REPOSITORY}`;
 function requireState(condition, reason) {
@@ -51,12 +51,14 @@ export async function publishWindowsUpdate(directory, version, env, request) {
     return response.json();
   }
 
-  const proof = env.REVIEWED_TAG_RULESET || await resolveTagRulesetProof(api, tag);
+  const ownerProof = normalizeTagRulesetProof(env.REVIEWED_TAG_RULESET);
+  requireState(!env.REVIEWED_TAG_RULESET || ownerProof, "Invalid owner tag ruleset proof.");
+  const proof = ownerProof || await resolveTagRulesetProof(api, tag);
   const id = proof?.split("@")[0];
   requireState(/^[1-9]\d*$/.test(id), "No verified no-bypass tag ruleset for this release.");
   async function verifyProtection() {
     const rule = await api(`${repo}/rulesets/${id}`);
-    requireState(tagRulesetProof(rule, tag, env.REVIEWED_TAG_RULESET) === proof,
+    requireState(tagRulesetProof(rule, tag, ownerProof ?? "") === proof,
       "Tag ruleset changed, is ineligible, or bypass actors cannot be verified.");
   }
   function verifyTag(result) {
