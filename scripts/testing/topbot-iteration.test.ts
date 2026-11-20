@@ -133,12 +133,27 @@ function fixture(block?: "review" | "full-ci" | "legacy" | "publish") {
     expect(ciRun).toBe(20);
     return { sha, pullRequest: pr };
   });
-  const run = async (input: string, preparePublication?: Parameters<typeof iterateTopBot>[1]["preparePublication"]) =>
-    iterateTopBot(input, { request, develop, edit, verify, slug, preparePublication });
+  type Timing = Pick<Parameters<typeof iterateTopBot>[1], "now" | "sleep">;
+  const run = async (input: string, preparePublication?: Parameters<typeof iterateTopBot>[1]["preparePublication"], timing?: Timing) =>
+    iterateTopBot(input, { request, develop, edit, verify, slug, preparePublication, ...timing });
   return { develop, edit, request, verify, events, writes, run };
 }
 
 describe("one chat instruction starts an automatic iteration", () => {
+  it("keeps waiting through a long hosted PR queue without skipping checks", async () => {
+    const f = fixture();
+    const request = f.request.getMockImplementation()!;
+    let time = 0;
+    const queuedUntil = 40 * 60_000;
+    f.request.mockImplementation(async (route, ...args) =>
+      route.includes("/workflows/ci.yml/runs?event=pull_request") && time < queuedUntil
+        ? { total_count: 0, workflow_runs: [] }
+        : request(route, ...args));
+
+    await expect(f.run(task, undefined, { now: () => time, sleep: async ms => { time += ms; } })).resolves.toMatchObject({ sha: head });
+    expect(time).toBeGreaterThanOrEqual(queuedUntil);
+  });
+
   it("edits, checks, advances, builds and reports an immutable release without a human gate", async () => {
     const f = fixture();
     const message = topBotIterationTask(`/topbot-iterate ${task}`);
