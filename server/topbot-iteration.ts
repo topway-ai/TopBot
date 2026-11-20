@@ -20,12 +20,12 @@ async function runIteration(task: string, editorKey?: string): Promise<Result> {
   const home = join(homedir(), ".topbot-development");
   const text = await readFile(join(home, "config.json"), "utf8").catch(() => "{}");
   const { automatic } = z.object({ automatic: z.object({ enabled: z.boolean(), nodeExecutable: z.string().refine(isAbsolute),
-    workerExecutable: z.string().refine(isAbsolute).optional() }).optional() })
+    workerExecutable: z.string().refine(isAbsolute).optional(), editor: z.enum(["deepseek", "local-qwen"]).optional() }).optional() })
     .parse(JSON.parse(text));
   if (!automatic?.enabled || !process.env.OMB_RESOURCES_PATH) {
     return { ok: false, message: "自动迭代尚未在此安装启用；未改动代码或发布。" };
   }
-  if (!automatic.workerExecutable && !editorKey) return { ok: false, message: "自动迭代需要已配置的 OpenRouter 连接；未改动代码或发布。" };
+  if (!automatic.workerExecutable && automatic.editor !== "local-qwen" && !editorKey) return { ok: false, message: "自动迭代需要已配置的 OpenRouter 连接；未改动代码或发布。" };
   const script = join(process.env.OMB_RESOURCES_PATH, "server", "release-controller", "scripts", "topbot-iteration.mjs");
   const inherited = /^(?:PATH|HOME|USERPROFILE|SYSTEMROOT|WINDIR|COMSPEC|PATHEXT|APPDATA|LOCALAPPDATA|PROGRAMFILES(?:\(X86\))?|PROGRAMDATA|TEMP|TMP|HOMEDRIVE|HOMEPATH)$/i;
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => inherited.test(name)));
@@ -36,7 +36,7 @@ async function runIteration(task: string, editorKey?: string): Promise<Result> {
       catch { resolve({ ok: false, message: "自动迭代进程异常终止。请核对开发工作区和 GitHub 状态；不会自动重试发布。" }); }
     });
     child.stdin?.on("error", () => {});
-    child.stdin?.end(JSON.stringify({ task, editorKey }));
+    child.stdin?.end(JSON.stringify({ task, ...(!automatic.workerExecutable && automatic.editor !== "local-qwen" && { editorKey }) }));
   });
 }
 

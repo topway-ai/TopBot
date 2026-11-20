@@ -1,5 +1,7 @@
 import { UPDATE_TEXT, updateErrorCode, updateErrorMessage, updateErrorNeedsPerson } from "./update-errors.mjs";
 import { detailFields, updateWords } from "./update-words.mjs";
+import { isNewerVersion } from "./update-version.mjs";
+export { isNewerVersion } from "./update-version.mjs";
 
 const said = (error) => {
   const code = updateErrorCode(error);
@@ -15,25 +17,6 @@ export function releaseNotesText(notes) {
       : "";
   const trimmed = text.trim();
   return trimmed ? trimmed.slice(0, 8000) : undefined;
-}
-
-/** True when `candidate` is a higher release than `base` (dotted numbers; a prerelease sorts below its release). */
-export function isNewerVersion(candidate, base) {
-  if (typeof candidate !== "string" || typeof base !== "string") return false;
-  const parse = (version) => {
-    const [core, pre] = version.trim().replace(/^v/, "").split("+")[0].split(/-(.*)/s);
-    return { nums: core.split(".").map((part) => Number.parseInt(part, 10) || 0), pre: pre ?? "" };
-  };
-  const a = parse(candidate);
-  const b = parse(base);
-  for (let i = 0; i < Math.max(a.nums.length, b.nums.length); i += 1) {
-    const diff = (a.nums[i] ?? 0) - (b.nums[i] ?? 0);
-    if (diff) return diff > 0;
-  }
-  if (a.pre === b.pre) return false;
-  if (!a.pre) return true;
-  if (!b.pre) return false;
-  return a.pre.localeCompare(b.pre, "en", { numeric: true }) > 0;
 }
 
 /** Three consecutive hourly failures: the app has gone about three hours without seeing the release feed. */

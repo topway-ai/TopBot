@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { gitAt, reviewAutomaticSnapshot } from "./topbot-auto-review.mjs";
-import { editWithDeepSeek } from "./topbot-iteration-editor.mjs";
+import { editWithDeepSeek, editWithLocalQwen } from "./topbot-iteration-editor.mjs";
 
 async function fixture(t) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "topbot-editor-"));
@@ -66,4 +66,19 @@ test("rejects out-of-scope text edits before changing the worktree", async t => 
   ] }) }), /out-of-scope/);
   assert.match(await f.read(f.file), /"Status"/);
   assert.equal(f.git(["rev-parse", "HEAD"]).trim(), f.input.base);
+});
+
+test("the offline editor targets the existing loopback Qwen without sending credentials", async t => {
+  const f = await fixture(t);
+  f.input.task = `Change ${f.file}`;
+  await editWithLocalQwen(f.input, { key: "never sent", request: async (url, init) => {
+    assert.equal(url, "http://127.0.0.1:8080/v1/chat/completions");
+    assert.equal(init.headers.authorization, undefined);
+    const body = JSON.parse(init.body);
+    assert.equal(body.model, "qwen35-4b-uncensored");
+    assert.equal(body.chat_template_kwargs.enable_thinking, false);
+    assert.ok(body.max_tokens <= 384);
+    return completion({ edits: [{ path: f.file, before: '"Status"', after: '"Ready"' }] });
+  } });
+  assert.match(await f.read(f.file), /"Ready"/);
 });

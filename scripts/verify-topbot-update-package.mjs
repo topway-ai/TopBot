@@ -62,10 +62,13 @@ await writeFile(path.join(job, "plan.json"), JSON.stringify(plan));
 const json = file => readFile(file, "utf8").then(JSON.parse);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const report = { base, updates, version: build.version, archiveBytes: size, started: new Date().toISOString(), checks: [] };
+const injectFailure = process.argv.includes("--inject-health-timeout");
 async function run(mode) {
   const started = Date.now();
+  const failApply = injectFailure && mode === "Apply";
   const child = spawn(ps, ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-File", path.join(job, "runner.ps1"),
-    "-Mode", mode, "-PlanPath", path.join(job, "plan.json"), ...(process.argv.includes("--register-recovery") ? [] : ["-NoRecoveryRegistration"])], { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    "-Mode", mode, "-PlanPath", path.join(job, "plan.json"), ...(failApply ? ["-ProbeSeconds", "120", "-TimeoutSeconds", "20"] : []),
+    ...(process.argv.includes("--register-recovery") ? [] : ["-NoRecoveryRegistration"])], { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   let output = "";
   child.stdout.on("data", chunk => { output = (output + chunk).slice(-8000); });
   child.stderr.on("data", chunk => { output = (output + chunk).slice(-8000); });
@@ -86,7 +89,8 @@ async function run(mode) {
   const state = await json(path.join(job, "state.json")).catch(() => null);
   const result = { mode, code, seconds: (Date.now() - started) / 1000, state, output };
   report.checks.push(result); console.log(JSON.stringify(result));
-  assert.equal(code, 0, output);
+  assert.equal(code, failApply ? 1 : 0, output);
+  if (failApply) assert.match(output, /sustained desktop and server health check/);
   return state;
 }
 try {
@@ -95,20 +99,28 @@ try {
     await writeFile(path.join(profile, "update-when-quiet.json"), JSON.stringify({ v: 1, from: previousVersion, to: build.version,
       tries: 1, at: Date.now(), window: false }));
   }
-  assert.equal((await run("Apply")).phase, "committed");
-  const health = await json(path.join(job, "health.json"));
-  assert.equal(health.ready, true); assert.equal(health.version, build.version);
+  assert.equal((await run("Apply")).phase, injectFailure ? "rolled-back" : "committed");
   assert.equal(await readFile(path.join(data, "qualification.txt"), "utf8"), "Disposable update fixture. No real account or key.\n");
-  assert.ok((await stat(path.join(job, "previous", "TopBot.exe"))).isFile());
-  if (process.argv.includes("--rollback-check")) {
+  const restoredVersion = () => JSON.parse(asar.extractFile(path.join(installDir, "resources", "app.asar"), "package.json").toString()).version;
+  if (injectFailure) {
+    assert.equal(restoredVersion(), previousVersion);
+    assert.ok((await json(path.join(updates, "blocked.json"))).includes(build.version));
+    report.automaticRollback = { version: previousVersion, retainedFixtureData: true, blockedCandidate: build.version };
+  } else {
+    const health = await json(path.join(job, "health.json"));
+    assert.equal(health.ready, true); assert.equal(health.version, build.version);
+    assert.ok((await stat(path.join(job, "previous", "TopBot.exe"))).isFile());
+    report.health = { ...health, token: "[omitted]" };
+  }
+  if (!injectFailure && process.argv.includes("--rollback-check")) {
     const sentinel = path.join(data, "after-upgrade.txt");
     await writeFile(sentinel, "The user's data must survive program rollback.\n");
     assert.equal((await run("Rollback")).phase, "rolled-back");
     assert.equal(await readFile(sentinel, "utf8"), "The user's data must survive program rollback.\n");
-    assert.equal(JSON.parse(asar.extractFile(path.join(installDir, "resources", "app.asar"), "package.json").toString()).version, previousVersion);
+    assert.equal(restoredVersion(), previousVersion);
     report.rollback = { version: previousVersion, retainedNewData: true };
   }
-  report.health = { ...health, token: "[omitted]" }; report.passed = true;
+  report.passed = true;
 } finally {
   await writeFile(path.join(job, "stop.json"), JSON.stringify({ token: plan.token }));
   await pause(5000);
@@ -117,6 +129,7 @@ try {
   const cleanup = await promisify(execFile)(ps, ["-NoProfile", "-NonInteractive", "-Command", expression], { windowsHide: true });
   report.fixtureProcessesForcedClosed = Number(cleanup.stdout.trim());
   report.ended = new Date().toISOString();
-  await writeFile(path.join(scratch, "topbot-update-package-result.json"), JSON.stringify(report, null, 2));
-  console.log(`Evidence: ${path.join(scratch, "topbot-update-package-result.json")}`);
+  const evidence = path.join(scratch, injectFailure ? "topbot-update-failure-rollback-result.json" : "topbot-update-package-result.json");
+  await writeFile(evidence, JSON.stringify(report, null, 2));
+  console.log(`Evidence: ${evidence}`);
 }

@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { checkManifest, MANIFEST_NAME, REPOSITORY } from "../electron/topbot-release.mjs";
 import { normalizeTagRulesetProof, resolveTagRulesetProof, tagRulesetProof } from "./topbot-tag-ruleset.mjs";
 import { verifyWindowsReleaseGate } from "./topbot-release-gate.mjs";
-import { isNewerVersion } from "../electron/updater-coordinator.mjs";
+import { isNewerVersion } from "../electron/update-version.mjs";
 
 const repo = `/repos/${REPOSITORY}`;
 function requireState(condition, reason) {

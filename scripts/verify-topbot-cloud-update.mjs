@@ -22,11 +22,13 @@ await downloadQualification({ run, head, branch, version, root: scratch }, { rea
   use: async archive => {
     await releaseAssets(archive, version);
     console.log(JSON.stringify({ run, head, branch, version, downloadedAndVerified: true }));
-    await new Promise((resolve, reject) => {
+    const qualify = (...testOptions) => new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [path.join(root, "scripts", "verify-topbot-update-package.mjs"), archive, oldApplication,
-        "--hidden-candidate", "--qualified-archive-only", "--rollback-check"], { stdio: "inherit", windowsHide: true });
+        "--hidden-candidate", "--qualified-archive-only", ...testOptions], { stdio: "inherit", windowsHide: true });
       child.once("error", reject);
       child.once("exit", code => code === 0 ? resolve() : reject(new Error(`Isolated Windows package test ended with ${code}.`)));
     });
+    await qualify("--rollback-check");
+    await qualify("--inject-health-timeout");
   },
 });

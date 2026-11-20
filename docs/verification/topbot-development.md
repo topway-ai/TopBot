@@ -67,6 +67,10 @@ connection and uses `deepseek/deepseek-v4-flash` unless `automatic.model`
 pins another DeepSeek model. It sends only the request and selected public
 source blobs. The model receives no tools, does not execute on this computer,
 and returns exact text replacements for bounded, already tracked UI files.
+For an isolated fixture or a small offline edit, `automatic.editor` can be
+`local-qwen`. This uses the pre-existing llama.cpp service on loopback;
+name the exact eligible UI path in the request. It does not use or need an
+OpenRouter key.
 If an external `workerExecutable` is configured instead, it must run in a
 separate profile without access to the owner's data or credentials. The required workflows and
 review script must already be installed on the trusted main branch. Rehearse

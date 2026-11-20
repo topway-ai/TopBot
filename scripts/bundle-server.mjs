@@ -150,7 +150,7 @@ const releaseController = join(root, "dist-server", "release-controller");
 for (const [folder, files] of [
   ["scripts", ["topbot-iteration.mjs", "topbot-iteration-editor.mjs", "topbot-development.mjs", "topbot-auto-github.mjs",
     "topbot-auto-review.mjs", "topbot-release-gate.mjs", "topbot-tag-ruleset.mjs", "topbot-qualification-artifact.mjs", "publish-topbot-windows.mjs"]],
-  ["electron", ["topbot-release.mjs", "updater-coordinator.mjs", "update-words.mjs", "update-errors.mjs", "native-text.cjs"]],
+  ["electron", ["topbot-release.mjs", "update-version.mjs"]],
 ]) {
   mkdirSync(join(releaseController, folder), { recursive: true });
   for (const file of files) copyFileSync(join(root, folder, file), join(releaseController, folder, file));

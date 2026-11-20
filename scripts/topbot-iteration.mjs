@@ -8,7 +8,7 @@ import { gitAt, runDevelopment } from "./topbot-development.mjs";
 import { advanceAutomaticMain, AutomaticCheckPending, requireAutomaticMain, verifyAutomaticCandidate } from "./topbot-auto-github.mjs";
 import { verifyWindowsReleaseGate, TopBotReleaseGateError } from "./topbot-release-gate.mjs";
 import { resolveTagRulesetProof } from "./topbot-tag-ruleset.mjs";
-import { editWithDeepSeek } from "./topbot-iteration-editor.mjs";
+import { editWithDeepSeek, editWithLocalQwen } from "./topbot-iteration-editor.mjs";
 import { publishQualifiedWindowsArchive, releaseAssets } from "./publish-topbot-windows.mjs";
 import { downloadQualification, qualificationDownloadUrl } from "./topbot-qualification-artifact.mjs";
 
@@ -228,7 +228,8 @@ async function main() {
     requireState(input.length <= 22_000, "Task input exceeds the limit.");
   }
   const { task, editorKey } = JSON.parse(input);
-  requireState(config.automatic.workerExecutable || (typeof editorKey === "string" && editorKey.length > 0 && editorKey.length <= 1024),
+  const localEditor = config.automatic.editor === "local-qwen";
+  requireState(config.automatic.workerExecutable || localEditor || (typeof editorKey === "string" && editorKey.length > 0 && editorKey.length <= 1024),
     "The isolated editor requires an OpenRouter key.");
   const lock = join(home, "iteration.lock");
   await mkdir(lock);
@@ -236,7 +237,8 @@ async function main() {
     const request = await githubOwner(config.checkout);
     const result = await iterateTopBot(task, { develop: args => runDevelopment(args, { home }),
       edit: job => config.automatic.workerExecutable ? editInSandbox(config.automatic, job)
-        : editWithDeepSeek({ ...job, workspace: job.path }, { key: editorKey, model: config.automatic.model ?? "deepseek/deepseek-v4-flash" }),
+        : localEditor ? editWithLocalQwen({ ...job, workspace: job.path })
+          : editWithDeepSeek({ ...job, workspace: job.path }, { key: editorKey, model: config.automatic.model ?? "deepseek/deepseek-v4-flash" }),
       request, preparePublication: (qualification, promote) => downloadQualification({ ...qualification, root: join(config.worktrees, ".qualification") },
         { read: request, download: request.download,
           use: async directory => {

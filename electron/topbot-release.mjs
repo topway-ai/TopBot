@@ -5,7 +5,7 @@ import { dirname } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import os from "node:os";
-import { isNewerVersion } from "./updater-coordinator.mjs";
+import { isNewerVersion } from "./update-version.mjs";
 
 export const REPOSITORY = "topway-ai/TopBot";
 export const UPDATE_LIMITS = Object.freeze({ freeRAM: 3 * 1024 ** 3, reserveDisk: 3 * 1024 ** 3,
