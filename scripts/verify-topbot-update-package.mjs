@@ -13,7 +13,12 @@ import { checkManifest, MANIFEST_NAME } from "../electron/topbot-release.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packaged = path.resolve(process.argv[2] || path.join(root, "release", "win-unpacked"));
 const previous = path.resolve(process.argv[3] || packaged);
-const build = JSON.parse(await readFile(path.join(packaged, "resources", "topbot-build.json"), "utf8"));
+const archiveOnly = process.argv.includes("--qualified-archive-only");
+assert.ok(!archiveOnly || previous !== packaged, "An archive-only test needs a separate previous installation.");
+const releaseDirectory = archiveOnly ? packaged : path.dirname(packaged);
+const releaseManifest = archiveOnly || process.argv.includes("--release-archive")
+  ? checkManifest(JSON.parse(await readFile(path.join(releaseDirectory, MANIFEST_NAME), "utf8"))) : null;
+const build = archiveOnly ? releaseManifest : JSON.parse(await readFile(path.join(packaged, "resources", "topbot-build.json"), "utf8"));
 const builder = createRequire(import.meta.resolve("electron-builder"));
 const asar = createRequire(builder.resolve("app-builder-lib"))("@electron/asar");
 const previousVersion = JSON.parse(asar.extractFile(path.join(previous, "resources", "app.asar"), "package.json").toString()).version;
@@ -35,11 +40,9 @@ console.log(JSON.stringify({ base, installDir, packaged, updates }));
 await cp(previous, installDir, { recursive: true, dereference: false });
 await cp(path.join(root, "electron", "topbot-update-runner.ps1"), path.join(job, "runner.ps1"));
 const zip = path.join(job, "update.zip");
-const releaseManifest = process.argv.includes("--release-archive")
-  ? checkManifest(JSON.parse(await readFile(path.join(path.dirname(packaged), MANIFEST_NAME), "utf8"))) : null;
 if (releaseManifest) {
   assert.equal(releaseManifest.version, build.version);
-  await cp(path.join(path.dirname(packaged), `TopBot-${releaseManifest.version}-x64.zip`), zip);
+  await cp(path.join(releaseDirectory, `TopBot-${releaseManifest.version}-x64.zip`), zip);
 } else {
   await promisify(execFile)(ps, ["-NoProfile", "-NonInteractive", "-File", path.join(root, "electron", "fixtures", "topbot-update-fixture.ps1"),
     "-Mode", "ZipFast", "-Source", packaged, "-Destination", zip], { windowsHide: true, timeout: 240000 });

@@ -108,7 +108,8 @@ function fixture(block?: "review" | "full-ci" | "legacy" | "publish") {
     expect(ciRun).toBe(20);
     return { sha, pullRequest: pr };
   });
-  const run = async (input: string) => iterateTopBot(input, { request, develop, edit, verify, slug });
+  const run = async (input: string, preparePublication?: Parameters<typeof iterateTopBot>[1]["preparePublication"]) =>
+    iterateTopBot(input, { request, develop, edit, verify, slug, preparePublication });
   return { develop, edit, request, verify, events, writes, run };
 }
 
@@ -146,6 +147,14 @@ describe("one chat instruction starts an automatic iteration", () => {
     await expect(f.run(task)).rejects.toThrow("editor stopped");
     expect(f.develop).toHaveBeenLastCalledWith(["retire-auto", slug]);
     expect(f.writes).toEqual([]);
+  });
+
+  it("does not advance main when the exact qualified artifact cannot be downloaded", async () => {
+    const f = fixture();
+    const prepare = vi.fn(async () => { throw new Error("artifact digest mismatch"); });
+    await expect(f.run(task, prepare)).rejects.toThrow("artifact digest mismatch");
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ head, branch, version }), expect.any(Function));
+    expect(f.writes).toEqual([`${repo}/actions/workflows/ci.yml/dispatches`, `${repo}/actions/workflows/topbot-windows-update.yml/dispatches`]);
   });
 
   it("does not advance main or dispatch release when full candidate CI fails", async () => {

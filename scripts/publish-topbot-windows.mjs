@@ -13,7 +13,7 @@ function requireState(condition, reason) {
   if (!condition) throw new Error(reason);
 }
 
-async function releaseAssets(directory, version) {
+export async function releaseAssets(directory, version) {
   const manifestBytes = await readFile(join(directory, MANIFEST_NAME));
   const manifest = checkManifest(JSON.parse(manifestBytes));
   requireState(manifest.version === version, "Artifact version differs from the reviewed package.json.");
@@ -33,7 +33,7 @@ async function releaseAssets(directory, version) {
 }
 
 export async function publishWindowsUpdate(directory, version, env, request) {
-  const sha = env.GITHUB_SHA, tag = `v${version}`, ref = `refs/tags/${tag}`;
+  const sha = env.GITHUB_SHA;
   const owner = REPOSITORY.split("/")[0];
   requireState(env.GITHUB_REPOSITORY === REPOSITORY && env.GITHUB_REF === "refs/heads/main" &&
     env.GITHUB_EVENT_NAME === "workflow_dispatch" && [env.GITHUB_ACTOR, env.GITHUB_TRIGGERING_ACTOR]
@@ -41,8 +41,6 @@ export async function publishWindowsUpdate(directory, version, env, request) {
     env.REVIEWED_SHA === sha && env.GH_TOKEN, "Publish requires the owner and the exact reviewed main SHA.");
   requireState(typeof env.TOPBOT_RELEASE_POLICY_TOKEN === "string" && env.TOPBOT_RELEASE_POLICY_TOKEN.trim() &&
     env.TOPBOT_RELEASE_POLICY_TOKEN !== env.GH_TOKEN, "Publish requires a separate read-only TOPBOT_RELEASE_POLICY_TOKEN.");
-  const assets = await releaseAssets(directory, version);
-
   async function api(path, method = "GET", data, token = env.GH_TOKEN) {
     const upload = data instanceof Blob;
     const response = await request(`https://${upload ? "uploads" : "api"}.github.com${path}`, {
@@ -54,9 +52,21 @@ export async function publishWindowsUpdate(directory, version, env, request) {
     requireState(response.status === (method === "POST" ? 201 : 200), `${method} ${path}: HTTP ${response.status}. Stop and inspect before retrying.`);
     return response.json();
   }
+  return publishQualifiedWindowsArchive(directory, version, {
+    sha, api, ruleRead: path => api(path, "GET", undefined, env.TOPBOT_RELEASE_POLICY_TOKEN),
+    requestedProof: env.REVIEWED_TAG_RULESET,
+    verifiedRun: env.VERIFIED_CI_RUN ? Number(env.VERIFIED_CI_RUN) : undefined,
+    attestations: (env.TOPBOT_AUTOMATIC_MAIN_RULESETS ?? "").split(",").map(part => normalizeTagRulesetProof(part.trim())).filter(Boolean),
+  });
+}
 
-  const ownerProof = normalizeTagRulesetProof(env.REVIEWED_TAG_RULESET);
-  requireState(!env.REVIEWED_TAG_RULESET || ownerProof, "Invalid owner tag ruleset proof.");
+/** A trusted publisher must verify the same exact commit, repository policy and bytes before every external write. */
+export async function publishQualifiedWindowsArchive(directory, version, { sha, api, ruleRead = api, requestedProof, verifiedRun, attestations = [] }) {
+  requireState(/^[a-f0-9]{40}$/.test(sha) && /^\d+\.\d+\.\d+-topbot\.\d+$/.test(version), "Invalid release commit or version.");
+  const tag = `v${version}`, ref = `refs/tags/${tag}`;
+  const assets = await releaseAssets(directory, version);
+  const ownerProof = normalizeTagRulesetProof(requestedProof);
+  requireState(!requestedProof || ownerProof, "Invalid owner tag ruleset proof.");
   const proof = ownerProof || await resolveTagRulesetProof(api, tag);
   const id = proof?.split("@")[0];
   requireState(/^[1-9]\d*$/.test(id), "No verified no-bypass tag ruleset for this release.");
@@ -95,10 +105,7 @@ export async function publishWindowsUpdate(directory, version, env, request) {
       "Release assets differ from the qualified build.");
   }
 
-  const policy = async () => verifyWindowsReleaseGate(
-    path => api(path, "GET", undefined, env.TOPBOT_RELEASE_POLICY_TOKEN), sha, undefined,
-    env.VERIFIED_CI_RUN ? Number(env.VERIFIED_CI_RUN) : undefined,
-    (env.TOPBOT_AUTOMATIC_MAIN_RULESETS ?? "").split(",").map(part => normalizeTagRulesetProof(part.trim())).filter(Boolean));
+  const policy = () => verifyWindowsReleaseGate(ruleRead, sha, undefined, verifiedRun, attestations);
   const qualified = await policy();
   const previous = await api(`${repo}/contents/package.json?ref=${qualified.base}`);
   requireState(previous?.type === "file" && previous.encoding === "base64" && typeof previous.content === "string" &&

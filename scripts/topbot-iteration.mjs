@@ -9,6 +9,8 @@ import { advanceAutomaticMain, AutomaticCheckPending, requireAutomaticMain, veri
 import { verifyWindowsReleaseGate, TopBotReleaseGateError } from "./topbot-release-gate.mjs";
 import { resolveTagRulesetProof } from "./topbot-tag-ruleset.mjs";
 import { editWithDeepSeek } from "./topbot-iteration-editor.mjs";
+import { publishQualifiedWindowsArchive, releaseAssets } from "./publish-topbot-windows.mjs";
+import { downloadQualification, qualificationDownloadUrl } from "./topbot-qualification-artifact.mjs";
 
 const repository = "topway-ai/TopBot";
 const repo = `/repos/${repository}`;
@@ -79,7 +81,7 @@ function newerThan(candidate, previous) {
 }
 
 export async function iterateTopBot(task, { develop, edit, request, report = () => {}, now = Date.now, sleep = wait,
-  slug = `iterate-${randomBytes(8).toString("hex")}`, verify = verifyWindowsReleaseGate }) {
+  slug = `iterate-${randomBytes(8).toString("hex")}`, verify = verifyWindowsReleaseGate, preparePublication }) {
   requireState(validIterationTask(task), "Submit a nonempty task of at most 4000 characters.");
   const read = path => request(path);
   const main = await read(`${repo}/branches/main`);
@@ -121,23 +123,29 @@ export async function iterateTopBot(task, { develop, edit, request, report = () 
   report("full-ci", { sha: candidate.head });
   const ciRun = await dispatchAndWait(request, "ci", candidate.branch, candidate.head, undefined, clock, 60 * 60_000);
   report("qualification", { sha: candidate.head });
-  await dispatchAndWait(request, "topbot-windows-update", candidate.branch, candidate.head,
+  const buildRun = await dispatchAndWait(request, "topbot-windows-update", candidate.branch, candidate.head,
     { publish: "false", reviewed_sha: candidate.head }, clock, 65 * 60_000);
-  const merged = await advanceAutomaticMain(request, candidate);
-  requireState(merged === candidate.head, "Verified automatic main update did not match the candidate.");
-  await until(async () => {
-    try { return await verify(read, merged, candidate.pr, ciRun); }
-    catch (error) {
-      if (error instanceof TopBotReleaseGateError && error.retryable === true) throw new AutomaticCheckPending();
-      throw error;
-    }
-  }, 120_000, clock);
-  const tagProof = await resolveTagRulesetProof(read, tag);
-  requireState(tagProof, "No matching immutable version-tag rule.");
-  await requireAutomaticMain(read, merged);
-  report("building", { version, sha: merged });
-  await dispatchAndWait(request, "topbot-windows-update", "main", merged,
-    { publish: "true", reviewed_sha: merged, reviewed_tag_ruleset: tagProof, verified_ci_run: String(ciRun) }, clock, 65 * 60_000);
+  const promote = async (publish) => {
+    const tagProof = await resolveTagRulesetProof(read, tag);
+    requireState(tagProof, "No matching immutable version-tag rule.");
+    const merged = await advanceAutomaticMain(request, candidate);
+    requireState(merged === candidate.head, "Verified automatic main update did not match the candidate.");
+    await until(async () => {
+      try { return await verify(read, merged, candidate.pr, ciRun); }
+      catch (error) {
+        if (error instanceof TopBotReleaseGateError && error.retryable === true) throw new AutomaticCheckPending();
+        throw error;
+      }
+    }, 120_000, clock);
+    await requireAutomaticMain(read, merged);
+    report("publishing", { version, sha: merged });
+    if (publish) await publish({ sha: merged, verifiedRun: ciRun, requestedProof: tagProof });
+    else await dispatchAndWait(request, "topbot-windows-update", "main", merged,
+      { publish: "true", reviewed_sha: merged, reviewed_tag_ruleset: tagProof, verified_ci_run: String(ciRun) }, clock, 65 * 60_000);
+  };
+  if (preparePublication) await preparePublication({ run: buildRun, head: candidate.head, branch: candidate.branch, version }, promote);
+  else await promote();
+  const merged = candidate.head;
   return until(async () => {
     let release;
     try { release = await read(`${repo}/releases/tags/${tag}`); }
@@ -175,20 +183,33 @@ async function editInSandbox(config, job) {
   });
 }
 
-async function githubOwner(checkout) {
+export async function githubOwner(checkout) {
   const cache = gitAt(checkout, ["-c", "credential.interactive=false", "credential", "fill"], {
     input: `protocol=https\nhost=github.com\npath=${repository}.git\nusername=topway-ai\n\n`, hidden: true,
   });
   const token = /^password=(\S+)\r?$/m.exec(cache)?.[1];
   requireState(token, "GitHub owner credential is unavailable.");
+  const headers = { authorization: `Bearer ${token}`, "user-agent": "TopBot-Iteration",
+    accept: "application/vnd.github+json", "x-github-api-version": "2026-03-10" };
   const call = async (path, method = "GET", body) => {
     requireState(path === "/user" || path === "/graphql" || path.startsWith(repo + "/"), "Unexpected GitHub endpoint.");
-    const r = await fetch(`https://api.github.com${path}`, { method, redirect: "error", signal: AbortSignal.timeout(15_000),
-      headers: { authorization: `Bearer ${token}`, "user-agent": "TopBot-Iteration",
-        accept: "application/vnd.github+json", "x-github-api-version": "2026-03-10", "content-type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const upload = body instanceof Blob;
+    requireState(!upload || (method === "POST" && path.startsWith(repo + "/releases/") &&
+      /^\/releases\/\d+\/assets\?name=(?:TopBot-[0-9.]+-topbot\.\d+-x64\.zip|topbot-windows-update\.json)$/.test(path.slice(repo.length))),
+    "Unexpected GitHub upload route.");
+    const r = await fetch(`https://${upload ? "uploads" : "api"}.github.com${path}`, {
+      method, redirect: "error", signal: AbortSignal.timeout(upload ? 20 * 60_000 : 15_000),
+      headers: { ...headers, "content-type": upload ? body.type : "application/json" },
+      ...(body === undefined ? {} : { body: upload ? body : JSON.stringify(body) }) });
     if (!r.ok) { await r.body?.cancel(); throw new IterationGitHubError(r.status); }
     return r.status === 204 ? undefined : r.json();
+  };
+  call.download = async path => {
+    requireState(path.startsWith(repo + "/actions/artifacts/") && /\/artifacts\/\d+\/zip$/.test(path), "Unexpected artifact route.");
+    const redirect = await fetch(`https://api.github.com${path}`, { headers, redirect: "manual", signal: AbortSignal.timeout(15_000) });
+    await redirect.body?.cancel();
+    requireState(redirect.status === 302 && redirect.headers.get("location"), "GitHub did not return a signed artifact location.");
+    return fetch(qualificationDownloadUrl(redirect.headers.get("location")), { redirect: "error", signal: AbortSignal.timeout(15 * 60_000) });
   };
   requireState((await call("/user"))?.login === "topway-ai", "GitHub owner identity mismatch.");
   return call;
@@ -215,7 +236,13 @@ async function main() {
     const request = await githubOwner(config.checkout);
     const result = await iterateTopBot(task, { develop: args => runDevelopment(args, { home }),
       edit: job => config.automatic.workerExecutable ? editInSandbox(config.automatic, job)
-        : editWithDeepSeek({ ...job, workspace: job.path }, { key: editorKey, model: config.automatic.model ?? "deepseek/deepseek-v4-flash" }), request });
+        : editWithDeepSeek({ ...job, workspace: job.path }, { key: editorKey, model: config.automatic.model ?? "deepseek/deepseek-v4-flash" }),
+      request, preparePublication: (qualification, promote) => downloadQualification({ ...qualification, root: join(config.worktrees, ".qualification") },
+        { read: request, download: request.download,
+          use: async directory => {
+            await releaseAssets(directory, qualification.version);
+            await promote(options => publishQualifiedWindowsArchive(directory, qualification.version, { ...options, api: request }));
+          } }) });
     console.log(JSON.stringify({ ok: true, ...result }));
   } finally { await rmdir(lock); }
 }

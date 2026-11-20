@@ -103,7 +103,7 @@ export interface ReportStatusQuestion { installId: string; ids: string[] }
 export interface ReportStatusAnswer { reports: Array<{ id: string; status: "received" | "fixed" | "unknown"; fixedIn: string | null }>; notify: boolean }
 const statusAnswerSchema = z.object({
   reports: z.array(z.object({ id: z.string().max(64), status: z.enum(["received", "fixed", "unknown"]),
-    fixedIn: z.string().regex(/^\d{1,6}\.\d{1,6}\.\d{1,6}$/).nullable() })).max(BUG_REPORT_STATUS_MAX_IDS),
+    fixedIn: z.string().regex(/^\d{1,6}\.\d{1,6}\.\d{1,6}(?:-topbot\.(?:0|[1-9]\d{0,7}))?$/).nullable() })).max(BUG_REPORT_STATUS_MAX_IDS),
   notify: z.boolean(),
 });
 /** A Cloud home's credential for its question: its machine and the bootstrap secret it shares with the Admin. */

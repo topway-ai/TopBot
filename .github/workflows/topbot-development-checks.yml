@@ -25,7 +25,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node --test --test-concurrency=1 scripts/topbot-development.node-test.mjs scripts/topbot-iteration-editor.node-test.mjs
+      - run: node --test --test-concurrency=1 scripts/topbot-development.node-test.mjs scripts/topbot-iteration-editor.node-test.mjs scripts/topbot-qualification-artifact.node-test.mjs
       - run: pnpm typecheck
       - run: pnpm exec vitest run server/topbot-chat-release.test.ts server/routes/bot-messages.test.ts server/request-auth.test.ts --maxWorkers=1
       - run: pnpm exec vitest run scripts/testing/topbot-release-publication.test.ts --maxWorkers=1

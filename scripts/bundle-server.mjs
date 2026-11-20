@@ -146,8 +146,14 @@ if (existsSync(join(root, "enterprise", "server", "index.ts"))) {
 // The packaged desktop and the container launcher run this bootstrap to turn on Node's compile cache.
 // Copied, not bundled: esbuild would inline index.js into it.
 copyFileSync(join(root, "scripts", "desktop-server-entry.mjs"), join(root, "dist-server", "desktop-entry.mjs"));
-for (const piece of ["topbot-iteration", "topbot-iteration-editor", "topbot-development", "topbot-auto-github", "topbot-auto-review", "topbot-release-gate", "topbot-tag-ruleset"]) {
-  copyFileSync(join(root, "scripts", `${piece}.mjs`), join(root, "dist-server", `${piece}.mjs`));
+const releaseController = join(root, "dist-server", "release-controller");
+for (const [folder, files] of [
+  ["scripts", ["topbot-iteration.mjs", "topbot-iteration-editor.mjs", "topbot-development.mjs", "topbot-auto-github.mjs",
+    "topbot-auto-review.mjs", "topbot-release-gate.mjs", "topbot-tag-ruleset.mjs", "topbot-qualification-artifact.mjs", "publish-topbot-windows.mjs"]],
+  ["electron", ["topbot-release.mjs", "updater-coordinator.mjs", "update-words.mjs", "update-errors.mjs", "native-text.cjs"]],
+]) {
+  mkdirSync(join(releaseController, folder), { recursive: true });
+  for (const file of files) copyFileSync(join(root, folder, file), join(releaseController, folder, file));
 }
 
 // The model catalog snapshot (server/model-catalog/catalog.ts) is read from

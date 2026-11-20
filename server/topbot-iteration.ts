@@ -19,12 +19,14 @@ export function topBotIterationTask(text: string): { task: string } | null {
 async function runIteration(task: string, editorKey?: string): Promise<Result> {
   const home = join(homedir(), ".topbot-development");
   const text = await readFile(join(home, "config.json"), "utf8").catch(() => "{}");
-  const { automatic } = z.object({ automatic: z.object({ enabled: z.boolean(), nodeExecutable: z.string().refine(isAbsolute) }).optional() })
+  const { automatic } = z.object({ automatic: z.object({ enabled: z.boolean(), nodeExecutable: z.string().refine(isAbsolute),
+    workerExecutable: z.string().refine(isAbsolute).optional() }).optional() })
     .parse(JSON.parse(text));
   if (!automatic?.enabled || !process.env.OMB_RESOURCES_PATH) {
     return { ok: false, message: "自动迭代尚未在此安装启用；未改动代码或发布。" };
   }
-  const script = join(process.env.OMB_RESOURCES_PATH, "server", "topbot-iteration.mjs");
+  if (!automatic.workerExecutable && !editorKey) return { ok: false, message: "自动迭代需要已配置的 OpenRouter 连接；未改动代码或发布。" };
+  const script = join(process.env.OMB_RESOURCES_PATH, "server", "release-controller", "scripts", "topbot-iteration.mjs");
   const inherited = /^(?:PATH|HOME|USERPROFILE|SYSTEMROOT|WINDIR|COMSPEC|PATHEXT|APPDATA|LOCALAPPDATA|PROGRAMFILES(?:\(X86\))?|PROGRAMDATA|TEMP|TMP|HOMEDRIVE|HOMEPATH)$/i;
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => inherited.test(name)));
   return new Promise(resolve => {

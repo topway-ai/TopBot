@@ -54,9 +54,10 @@ The protected main branch must require GitHub Actions' `CI` and `TopBot
 automatic review` checks, block deletion and force pushes, and have no
 manual review requirement or bypass actors. After both checks pass on the
 exact snapshot and base, the controller runs full CI and an artifact-only
-Windows qualification on that exact candidate. Only then does GitHub apply
-a non-forcing atomic ref update and start publication. The publish job
-rechecks CI before reserving a tag and before publishing.
+Windows qualification on that exact candidate, then downloads and verifies
+the qualification artifact. Only then does GitHub apply a non-forcing
+atomic ref update. The local publisher rechecks CI and repository policy
+before reserving a tag and before publishing the same qualified archive.
 There is no second chat confirmation, human review or approval environment.
 
 Provision the trusted local `automatic` configuration in
@@ -73,9 +74,11 @@ with disposable data before changing an existing production install or
 repository policy. The controller never disables protection as a fallback.
 
 Enable GitHub Immutable Releases for this repository before testing a
-production dispatch. The publish job checks that the setting is enabled
-and verifies the published release is immutable. Give the policy check its
-own repository-scoped read-only credential via `TOPBOT_RELEASE_POLICY_TOKEN`
+production dispatch. The publisher checks the setting and verifies the
+published release is immutable. Automatic publication reads policy locally
+through the authenticated GitHub controller; GitHub Actions only builds.
+When using the optional manual dispatch, give its policy check its own
+repository-scoped read-only credential via `TOPBOT_RELEASE_POLICY_TOKEN`
 in the main-only `topbot-windows-release` environment. It
 needs read access to Administration, Actions, Contents and Pull requests.
 The policy credential is only used for GitHub GET requests, never for tags
@@ -120,9 +123,17 @@ create a release.
 
 ```sh
 node --test --test-concurrency=1 scripts/topbot-development.node-test.mjs
+node --test scripts/topbot-iteration-editor.node-test.mjs scripts/topbot-qualification-artifact.node-test.mjs
 ```
 
 The test uses real disposable Git worktrees and a synthetic GitHub API. It
 proves original working files are untouched, private files and unsafe branches
 are blocked, success creates an exact draft, repeated submission reuses it,
 and no release request exists. It never uses a real GitHub credential.
+
+After a GitHub Windows qualification finishes, use
+`node scripts/verify-topbot-cloud-update.mjs RUN SHA BRANCH VERSION PREVIOUS_FIXTURE`
+on Windows. The harness downloads and checks the exact GitHub Actions
+artifact, updates a fresh copy of the supplied old program, then rolls back
+the program while preserving data written after the upgrade. It never makes
+a Release or changes the running installation.
