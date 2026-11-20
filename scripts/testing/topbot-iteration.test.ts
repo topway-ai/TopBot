@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { iterateTopBot, IterationGitHubError } from "../topbot-iteration.mjs";
+import { iterateTopBot, IterationGitHubError, waitForLocalEditorMemory } from "../topbot-iteration.mjs";
 import { createTopBotIteration, topBotIterationTask } from "../../server/topbot-iteration.ts";
 
 const owner = "topway-ai/TopBot", repo = `/repos/${owner}`;
@@ -12,6 +12,31 @@ const ruleEntries = [{ type: "deletion" }, { type: "non_fast_forward" },
   { type: "required_status_checks", parameters: { required_status_checks: contexts.map(context => ({ context, integration_id: 15368 })) } }];
 const ref = { ref: `refs/tags/${tag}`, object: { sha: head, type: "commit" } };
 const task = "Change the test card heading";
+
+describe("local editor resource recovery", () => {
+  const limits = { freeRAM: 2, minimumRAM: 3, freeDisk: 7, minimumDisk: 6 };
+  const clock = () => {
+    let time = 0;
+    return { now: () => time, sleep: vi.fn(async (ms: number) => { time += ms; }), timeout: 20_000 };
+  };
+
+  it("waits for RAM without calling any publishing operation", async () => {
+    const timer = clock();
+    const sample = vi.fn().mockResolvedValueOnce(limits).mockResolvedValueOnce({ ...limits, freeRAM: 5 });
+    await waitForLocalEditorMemory(sample, timer);
+    expect(sample).toHaveBeenCalledTimes(2);
+    expect(timer.sleep).toHaveBeenCalledExactlyOnceWith(15_000);
+  });
+
+  it("stops on a full staging disk and bounds RAM recovery", async () => {
+    const disk = clock();
+    await expect(waitForLocalEditorMemory(() => ({ ...limits, freeDisk: 5 }), disk)).rejects.toThrow("staging disk");
+    expect(disk.sleep).not.toHaveBeenCalled();
+    const ram = clock();
+    await expect(waitForLocalEditorMemory(() => limits, ram)).rejects.toThrow("not enough RAM");
+    expect(ram.sleep.mock.calls).toEqual([[15_000], [5_000]]);
+  });
+});
 
 function fixture(block?: "review" | "full-ci" | "legacy" | "publish") {
   const events: string[] = [], writes: string[] = [];
