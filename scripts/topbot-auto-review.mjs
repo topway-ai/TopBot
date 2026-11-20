@@ -36,7 +36,7 @@ const sensitiveText = /(?:[a-z]:[\\/]+(?:Users|ProgramData|Documents and Setting
 const privilegedSource = /\b(?:child_process|process|Deno|Bun|require|eval|Function|globalThis|window|document|navigator|localStorage|sessionStorage|indexedDB|WebSocket|XMLHttpRequest|fetch|sendBeacon|dangerouslySetInnerHTML|innerHTML|electron|ipcRenderer|importScripts)\b/;
 const buildDirective = /\bnode:|@(?:import|plugin|config|source|jsx\w*)\b|url\s*\(|@vite-ignore|@ts-(?:ignore|nocheck)|<reference\b|https?:\/\//i;
 const uiImport = /^[ \t]*import\s+(?:(?:type\s+)?(?:[A-Za-z_$][\w$]*(?:\s*,\s*)?)?(?:\{[\w$,\s]+\})?\s*from\s*)?(["'])([^"'\r\n]+)\1[ \t]*;?[ \t]*$/gm;
-function autoPath(file) {
+export function autoPath(file) {
   if (file === "package.json") return true;
   const name = file.slice(file.lastIndexOf("/") + 1).split(".")[0];
   if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(name)) return false;

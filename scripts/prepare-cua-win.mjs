@@ -32,12 +32,13 @@ if (expectedVersion !== release.version) {
   );
 }
 
-async function binaryVersion(candidate) {
+async function binaryVersion(candidate, required = false) {
   if (!candidate || !existsSync(candidate)) return null;
   try {
-    const { stdout } = await run(candidate, ["--version"], { timeout: 5000, windowsHide: true });
+    const { stdout } = await run(candidate, ["--version"], { timeout: 30_000, windowsHide: true });
     return stdout.match(/cua-driver\s+([\d.]+)/)?.[1] ?? null;
-  } catch {
+  } catch (error) {
+    if (required) throw new Error(`CUA executable version probe failed (${error.killed ? "timed out" : error.code ?? error.signal ?? "unknown"}).`, { cause: error });
     return null;
   }
 }
@@ -63,13 +64,9 @@ async function officialBinary() {
   }
   const archive = join(cache, release.file);
   await writeFile(archive, bytes);
-  await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-    "Expand-Archive -LiteralPath $env:OMB_CUA_ARCHIVE -DestinationPath $env:OMB_CUA_EXTRACT"], {
-    env: { ...process.env, OMB_CUA_ARCHIVE: archive, OMB_CUA_EXTRACT: cache },
-    timeout: 60_000,
-    windowsHide: true,
-  });
-  if ((await binaryVersion(cachedBinary)) !== expectedVersion) {
+  await run(join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe"),
+    ["-xf", archive, "-C", cache], { timeout: 60_000, windowsHide: true });
+  if ((await binaryVersion(cachedBinary, true)) !== expectedVersion) {
     throw new Error(`downloaded CUA Driver does not report version ${expectedVersion}`);
   }
   return cachedBinary;

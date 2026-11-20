@@ -12078,7 +12078,7 @@ ROUTES.push(createBotMessageRoutes({
   routines: () => routines,
   fromPhone: phones.fromPhone, notePhoneSend: phones.noteSend,
   desktopManaged: DESKTOP_MANAGED, cloudHome: Boolean(CLOUD_HOME), DirectSendRefused,
-  topBotIteration: DESKTOP_MANAGED && !CLOUD_HOME && process.platform === "win32" ? createTopBotIteration({ available: () => !store.bots.some((bot) => bot.busy || activeGroupTurnForBot(bot.id) || store.tasks(bot.id).some((task) => threadBusy(bot.id, task.threadId))) }) : undefined,
+  topBotIteration: DESKTOP_MANAGED && !CLOUD_HOME && process.platform === "win32" ? createTopBotIteration({ editorKey: () => cfg.openrouter?.key, available: () => !store.bots.some((bot) => bot.busy || activeGroupTurnForBot(bot.id) || store.tasks(bot.id).some((task) => threadBusy(bot.id, task.threadId))) }) : undefined,
   acceptDirectSend, directSendRefusal, startTurn, usageTriggerFor, messageSender, cloudGuestSendRefusal, cloudThreadRefusal, runOwners, runActor, resolveAccessRequest: (threadId, requestId, behavior, message) => lendingLifts?.resolve(threadId, requestId, behavior) ?? accessRequests.resolve(threadId, requestId, behavior, message), relayRefusal: CLOUD_TEAM ? (bot, email) => relayedSendRefusal(bot, email, Boolean(email && teamOwners.people?.list().some((one) => one.email === email && one.role !== "member"))) : undefined,
   noAiRefusal: noAiNotice.refusal, cardAnswerRefusal, commandRememberRefusal, requestBehavior, requestedTaskBot, botForThread, threadBusy,
   botAtThreadCapacity, parksBehindCoordination, activeGroupTurnForBot, runningTurnInstance, engineSteersImages, resolveReplyTarget,

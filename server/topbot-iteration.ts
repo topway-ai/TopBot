@@ -16,7 +16,7 @@ export function topBotIterationTask(text: string): { task: string } | null {
   return command.test(text) ? { task: text.slice("/topbot-iterate".length).trim() } : null;
 }
 
-async function runIteration(task: string): Promise<Result> {
+async function runIteration(task: string, editorKey?: string): Promise<Result> {
   const home = join(homedir(), ".topbot-development");
   const text = await readFile(join(home, "config.json"), "utf8").catch(() => "{}");
   const { automatic } = z.object({ automatic: z.object({ enabled: z.boolean(), nodeExecutable: z.string().refine(isAbsolute) }).optional() })
@@ -25,7 +25,8 @@ async function runIteration(task: string): Promise<Result> {
     return { ok: false, message: "自动迭代尚未在此安装启用；未改动代码或发布。" };
   }
   const script = join(process.env.OMB_RESOURCES_PATH, "server", "topbot-iteration.mjs");
-  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^NODE_(?:OPTIONS|PATH)$/i.test(name)));
+  const inherited = /^(?:PATH|HOME|USERPROFILE|SYSTEMROOT|WINDIR|COMSPEC|PATHEXT|APPDATA|LOCALAPPDATA|PROGRAMFILES(?:\(X86\))?|PROGRAMDATA|TEMP|TMP|HOMEDRIVE|HOMEPATH)$/i;
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => inherited.test(name)));
   return new Promise(resolve => {
     const child = execFile(automatic.nodeExecutable, ["--max-old-space-size=384", script], { cwd: home, env, windowsHide: true,
       maxBuffer: 1_048_576, timeout: 250 * 60_000 }, (_error, stdout) => {
@@ -33,20 +34,21 @@ async function runIteration(task: string): Promise<Result> {
       catch { resolve({ ok: false, message: "自动迭代进程异常终止。请核对开发工作区和 GitHub 状态；不会自动重试发布。" }); }
     });
     child.stdin?.on("error", () => {});
-    child.stdin?.end(JSON.stringify({ task }));
+    child.stdin?.end(JSON.stringify({ task, editorKey }));
   });
 }
 
-export function createTopBotIteration({ run = runIteration, available = () => true }: {
-  run?: (task: string) => Promise<Result>;
+export function createTopBotIteration({ run = runIteration, available = () => true, editorKey = () => undefined }: {
+  run?: (task: string, editorKey?: string) => Promise<Result>;
   available?: () => boolean;
+  editorKey?: () => string | undefined;
 } = {}) {
   let busy = false;
   return (task: string, report: (message: string) => void) => {
     if (!task || task.length > 4000 || /[^\P{Cc}\t\n\r]/u.test(task)) return "用法：`/topbot-iterate 需求`，需求最多 4000 字符。";
     if (busy || !available()) return "TopBot 有任务正在运行，请等当前任务结束。";
     busy = true;
-    void Promise.resolve().then(() => run(task)).then(
+    void Promise.resolve().then(() => run(task, editorKey())).then(
       (result) => report(result.ok
         ? `TopBot ${result.version} 已发布：[PR #${result.pr}](https://github.com/topway-ai/TopBot/pull/${result.pr})。空闲时由更新器安装，启动失败会回滚。`
         : result.message),

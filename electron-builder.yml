@@ -241,11 +241,12 @@ linux:
       to: openmausbot-browser.apparmor
   desktop:
     entry:
-      Name: OpenMausBot
+      Name: TopBot
       Comment: Your own team of AI bots, in a chat app
       Keywords: AI;Agents;Chat;Productivity;
 
 deb:
+  packageName: openmausbot
   packageCategory: utils
   priority: optional
   # Add the narrow browser policy's parser without replacing Electron's
@@ -257,6 +258,7 @@ deb:
   afterRemove: build/linux-after-remove.sh
 
 pacman:
+  packageName: openmausbot
   packageCategory: utils
   fpm: ["--depends", "fuse3", "--depends", "gtk3", "--depends", "nss", "--depends", "alsa-lib", "--depends", "libcups", "--depends", "mesa"]
   afterInstall: build/linux-after-install.sh

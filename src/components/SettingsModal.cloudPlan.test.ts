@@ -39,11 +39,10 @@ describe.each(["Simple", "Advanced"] as const)("%s Settings → Plan & billing o
     expect(html).toContain("CLOUD_PLAN_MARKER home"); expect(html).toContain(reachable);
     expect(html).toContain('data-settings-page-open="plan"');
   });
-  it("is the full plan page in the app on this computer, with the offer in both modes", () => {
+  it("does not present a Cloud offer to a signed-out desktop", () => {
     vi.stubGlobal("window", { ogb: { cloudAccount: {}, cloudPlan: plan } });
     const html = render();
-    expect(html).toContain("CLOUD_PLAN_MARKER offer");
-    expect(html).not.toContain("CLOUD_PLAN_MARKER home");
-    expect(html).toContain(reachable);
+    expect(html).not.toContain("CLOUD_PLAN_MARKER");
+    expect(html).not.toContain(reachable);
   });
 });

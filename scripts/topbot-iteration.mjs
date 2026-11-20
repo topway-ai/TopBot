@@ -1,13 +1,14 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rmdir } from "node:fs/promises";
-import { homedir } from "node:os";
+import { constants, homedir, setPriority } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { gitAt, runDevelopment } from "./topbot-development.mjs";
 import { advanceAutomaticMain, AutomaticCheckPending, requireAutomaticMain, verifyAutomaticCandidate } from "./topbot-auto-github.mjs";
 import { verifyWindowsReleaseGate, TopBotReleaseGateError } from "./topbot-release-gate.mjs";
 import { resolveTagRulesetProof } from "./topbot-tag-ruleset.mjs";
+import { editWithDeepSeek } from "./topbot-iteration-editor.mjs";
 
 const repository = "topway-ai/TopBot";
 const repo = `/repos/${repository}`;
@@ -194,23 +195,27 @@ async function githubOwner(checkout) {
 }
 
 async function main() {
+  try { setPriority(0, constants.priority.PRIORITY_BELOW_NORMAL); } catch {}
   const home = join(homedir(), ".topbot-development");
   const config = JSON.parse(await readFile(join(home, "config.json"), "utf8"));
   requireState(config.automatic?.enabled === true && isAbsolute(config.checkout) &&
-    typeof config.automatic.workerExecutable === "string" && isAbsolute(config.automatic.workerExecutable),
+    (config.automatic.workerExecutable === undefined || isAbsolute(config.automatic.workerExecutable)),
   "Automatic iteration is not provisioned for this Windows profile.");
   let input = "";
   for await (const chunk of process.stdin.setEncoding("utf8")) {
     input += chunk;
     requireState(input.length <= 22_000, "Task input exceeds the limit.");
   }
-  const { task } = JSON.parse(input);
+  const { task, editorKey } = JSON.parse(input);
+  requireState(config.automatic.workerExecutable || (typeof editorKey === "string" && editorKey.length > 0 && editorKey.length <= 1024),
+    "The isolated editor requires an OpenRouter key.");
   const lock = join(home, "iteration.lock");
   await mkdir(lock);
   try {
     const request = await githubOwner(config.checkout);
     const result = await iterateTopBot(task, { develop: args => runDevelopment(args, { home }),
-      edit: job => editInSandbox(config.automatic, job), request });
+      edit: job => config.automatic.workerExecutable ? editInSandbox(config.automatic, job)
+        : editWithDeepSeek({ ...job, workspace: job.path }, { key: editorKey, model: config.automatic.model ?? "deepseek/deepseek-v4-flash" }), request });
     console.log(JSON.stringify({ ok: true, ...result }));
   } finally { await rmdir(lock); }
 }

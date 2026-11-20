@@ -60,12 +60,14 @@ rechecks CI before reserving a tag and before publishing.
 There is no second chat confirmation, human review or approval environment.
 
 Provision the trusted local `automatic` configuration in
-`%USERPROFILE%/.topbot-development/config.json` with `enabled` and absolute
-`nodeExecutable` and `workerExecutable` paths. The worker accepts a JSON
-object with `workspace` and `prompt` on stdin, commits only to that workspace,
-and must run in a separately provisioned profile with no access to the
-desktop owner's data or credentials. Do not use the owner's normal Codex
-launcher as this worker. The required workflows and
+`%USERPROFILE%/.topbot-development/config.json` with `enabled` and an absolute
+`nodeExecutable` path. The built-in editor calls the existing OpenRouter
+connection and uses `deepseek/deepseek-v4-flash` unless `automatic.model`
+pins another DeepSeek model. It sends only the request and selected public
+source blobs. The model receives no tools, does not execute on this computer,
+and returns exact text replacements for bounded, already tracked UI files.
+If an external `workerExecutable` is configured instead, it must run in a
+separate profile without access to the owner's data or credentials. The required workflows and
 review script must already be installed on the trusted main branch. Rehearse
 with disposable data before changing an existing production install or
 repository policy. The controller never disables protection as a fallback.

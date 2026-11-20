@@ -873,7 +873,7 @@ export async function handleToolCall(
         }),
       });
       if (!isRecord(created?.bot) || typeof created.bot.id !== "string") {
-        throw new Error("OpenMausBot did not return the created bot");
+        throw new Error("TopBot did not return the created bot");
       }
       return { success: true, bot: projectBot(created.bot) };
     }
@@ -891,7 +891,7 @@ export async function handleToolCall(
         body: JSON.stringify(patch),
       });
       if (!isRecord(result?.bot)) {
-        throw new Error("OpenMausBot did not return the updated bot");
+        throw new Error("TopBot did not return the updated bot");
       }
       return { success: true, bot: projectBot(result.bot) };
     }
@@ -960,7 +960,7 @@ export async function handleToolCall(
         }),
       });
       if (!isRecord(created?.group) || typeof created.group.id !== "string") {
-        throw new Error("OpenMausBot did not return the created channel");
+        throw new Error("TopBot did not return the created channel");
       }
       return { success: true, channel: projectChannel(created.group) };
     }
@@ -984,7 +984,7 @@ export async function handleToolCall(
         body: JSON.stringify(patch),
       });
       if (!isRecord(result?.group)) {
-        throw new Error("OpenMausBot did not return the updated channel");
+        throw new Error("TopBot did not return the updated channel");
       }
       return { success: true, channel: projectChannel(result.group) };
     }
@@ -995,7 +995,7 @@ export async function handleToolCall(
       const route = taskRoute(args.target_type, targetId);
       const result = await fetcher(route, { method: "POST", body: JSON.stringify(title ? { title } : {}) });
       if (!isRecord(result?.task) || typeof result.task.threadId !== "string") {
-        throw new Error("OpenMausBot did not return the created task");
+        throw new Error("TopBot did not return the created task");
       }
       const activeTaskId = result.bot?.threadId ?? result.group?.threadId ?? result.task?.threadId;
       return {
@@ -1033,7 +1033,7 @@ export async function handleToolCall(
         body: JSON.stringify({ title }),
       });
       if (!isRecord(result?.task)) {
-        throw new Error("OpenMausBot did not return the renamed task");
+        throw new Error("TopBot did not return the renamed task");
       }
       return {
         success: true,
@@ -1106,7 +1106,7 @@ export async function handleToolCall(
           method: "PATCH",
           body: JSON.stringify({ modelSelection: selection, requireAvailableModel: true }),
         });
-        if (!isRecord(res?.task)) throw new Error("OpenMausBot did not return the updated task");
+        if (!isRecord(res?.task)) throw new Error("TopBot did not return the updated task");
         return { success: true, botId, task: projectTask(res.task, bot.threadId) };
       }
       if (bot.busy) throw new Error("Interrupt the bot or let it finish before changing its model");

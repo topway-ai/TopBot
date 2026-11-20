@@ -19,15 +19,19 @@ export interface BugReportField {
 }
 
 const VERSION = /^v?(\d{1,6})\.(\d{1,6})\.(\d{1,6})(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+const TOPBOT_RELEASE = /^topbot\.(0|[1-9]\d{0,7})$/;
 
 /** Whether this app's version (`running`) is the release `fixedIn` or a later one. Anything that doesn't read as a version is
  * never at least it, and neither is a pre-release of that very release: the fix is said to be here only when it surely is. */
 export function versionAtLeast(running: string, fixedIn: string): boolean {
   const have = VERSION.exec(running.trim()), want = VERSION.exec(fixedIn.trim());
-  if (!have || !want || want[4] !== undefined) return false;
+  if (!have || !want) return false;
+  const haveFork = TOPBOT_RELEASE.exec(have[4] ?? ""), wantFork = TOPBOT_RELEASE.exec(want[4] ?? "");
+  if (want[4] !== undefined && (!wantFork || !haveFork)) return false;
   for (const part of [1, 2, 3]) {
     const a = Number(have[part]), b = Number(want[part]);
     if (a !== b) return a > b;
   }
-  return have[4] === undefined;
+  if (wantFork) return Number(haveFork![1]) >= Number(wantFork[1]);
+  return have[4] === undefined || haveFork !== null;
 }

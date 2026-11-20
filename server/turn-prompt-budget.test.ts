@@ -78,8 +78,8 @@ const PROMPT_BUDGET_BASELINE: Record<string, number> = {
   "claude:volatile-note": 178,
   "codex:direct-chat": 8895,
   "codex:setup-chat": 11291,
-  "codex:resumed-instructions": 213,
-  "codex:volatile-note": 97,
+  "codex:resumed-instructions": 208,
+  "codex:volatile-note": 92,
 };
 
 describe("TopBot's prompt text per turn", () => {

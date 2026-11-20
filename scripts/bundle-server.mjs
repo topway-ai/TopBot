@@ -146,7 +146,7 @@ if (existsSync(join(root, "enterprise", "server", "index.ts"))) {
 // The packaged desktop and the container launcher run this bootstrap to turn on Node's compile cache.
 // Copied, not bundled: esbuild would inline index.js into it.
 copyFileSync(join(root, "scripts", "desktop-server-entry.mjs"), join(root, "dist-server", "desktop-entry.mjs"));
-for (const piece of ["topbot-iteration", "topbot-development", "topbot-auto-github", "topbot-auto-review", "topbot-release-gate", "topbot-tag-ruleset"]) {
+for (const piece of ["topbot-iteration", "topbot-iteration-editor", "topbot-development", "topbot-auto-github", "topbot-auto-review", "topbot-release-gate", "topbot-tag-ruleset"]) {
   copyFileSync(join(root, "scripts", `${piece}.mjs`), join(root, "dist-server", `${piece}.mjs`));
 }
 

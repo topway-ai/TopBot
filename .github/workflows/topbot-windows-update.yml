@@ -26,7 +26,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    if: github.repository == 'topway-ai/TopBot' && (github.ref == 'refs/heads/main' || (!inputs.publish && startsWith(github.ref, 'refs/heads/topbot-auto/')))
+    if: >-
+      github.repository == 'topway-ai/TopBot' &&
+      (github.ref == 'refs/heads/main' || (!inputs.publish &&
+      (startsWith(github.ref, 'refs/heads/topbot-auto/') || startsWith(github.ref, 'refs/heads/topbot-dev/'))))
     runs-on: windows-latest
     timeout-minutes: 60
     outputs:
@@ -35,7 +38,7 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=3072
     steps:
       - name: Verify the exact candidate commit
-        if: inputs.publish || startsWith(github.ref, 'refs/heads/topbot-auto/')
+        if: inputs.publish || github.ref != 'refs/heads/main'
         shell: pwsh
         env:
           REVIEWED_SHA: ${{ inputs.reviewed_sha }}
@@ -43,7 +46,7 @@ jobs:
           if ($env:GITHUB_ACTOR -ne $env:GITHUB_REPOSITORY_OWNER -or
               $env:GITHUB_TRIGGERING_ACTOR -ne $env:GITHUB_REPOSITORY_OWNER -or
               $env:REVIEWED_SHA -cnotmatch '^[a-f0-9]{40}$' -or $env:REVIEWED_SHA -cne $env:GITHUB_SHA) {
-            throw 'Publish requires the repository owner to dispatch the exact reviewed main commit.'
+            throw 'This build requires the repository owner to dispatch the exact candidate commit.'
           }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

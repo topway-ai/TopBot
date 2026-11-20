@@ -85,10 +85,10 @@ describe("the Settings window", () => {
     ["My Cloud's rail in the desktop window", () => { vi.stubGlobal("window", { ogb: { platform: "darwin", cloudPlan: { state: () => new Promise(() => {}) }, workspaces: { state: () => new Promise(() => {}), places: () => new Promise(() => {}) } } }); fixture.config = { cloudHome: true }; }],
     ["My Cloud in a browser", () => { vi.stubGlobal("window", {}); fixture.config = { cloudHome: true }; }],
   ];
-  it.each(SIMPLE_PEOPLE)("shows Simple's nine entries for %s", (_who, set) => {
+  it.each(SIMPLE_PEOPLE)("shows Simple's entries for %s without a signed-out plan offer", (who, set) => {
     set();
     fixture.advanced = false;
-    expect(navPages(render("overview"))).toEqual(SIMPLE_NAV);
+    expect(navPages(render("overview"))).toEqual(who.startsWith("My Cloud") ? SIMPLE_NAV : SIMPLE_NAV.filter(page => page !== "plan"));
     fixture.advanced = true;
     const advanced = navPages(render("overview"));
     for (const page of ["bots", "desktops", "usage", "data", "general"]) expect(advanced).toContain(page);

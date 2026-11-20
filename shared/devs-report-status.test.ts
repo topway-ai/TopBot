@@ -22,5 +22,10 @@ describe("whether this app runs a fix's release", () => {
     expect(versionAtLeast("dev", "0.1.135")).toBe(false);
     expect(versionAtLeast("0.1.135", "next")).toBe(false);
     expect(versionAtLeast("", "")).toBe(false);
+    expect(versionAtLeast("0.1.161-topbot.9", "0.1.161-topbot.9")).toBe(true);
+    expect(versionAtLeast("0.1.161-topbot.10", "0.1.161-topbot.9")).toBe(true);
+    expect(versionAtLeast("0.1.161-topbot.8", "0.1.161-topbot.9")).toBe(false);
+    expect(versionAtLeast("0.1.161-topbot.9", "0.1.161")).toBe(true);
+    expect(versionAtLeast("0.1.162", "0.1.161-topbot.9")).toBe(false);
   });
 });

@@ -294,7 +294,7 @@ export function Composer({
   const effectiveChannelMode = typedGoalText !== null ? "goal" : channelMode;
   const engineSupportsImages = imageTargetsSupport(effectiveText, effectiveChannelMode);
   const uploadVideo = !group && Boolean(bot && state.instances.find(instance => instance.instanceId === bot.modelSelection.instanceId)
-    ?.models.options.find(model => model.id === bot.modelSelection.model)?.videoReview);
+    ?.models?.options.find(model => model.id === bot.modelSelection.model)?.videoReview);
 
   const slash = composerSlashTrigger(text, caret);
   const locale = activeLocale();
