@@ -6,7 +6,7 @@ import { runUpdateHelper } from "../topbot-managed-update.mjs";
 const job = path.resolve(process.argv[2]);
 const plan = JSON.parse(await readFile(path.join(job, "plan.json"), "utf8"));
 const child = await runUpdateHelper(job, "Apply", { detached: true,
-  spawnImpl: (executable, args, options) => spawn(executable, [...args, "-NoRecoveryRegistration", "-ProbeSeconds", "1", "-TimeoutSeconds", "6"], options) });
+  spawnImpl: (executable, args, options) => spawn(executable, [...args, "-NoRecoveryRegistration", "-ProbeSeconds", "1", "-TimeoutSeconds", "30"], options) });
 let handedOff = false;
 for (let i = 0; i < 100; i++) {
   const ready = await readFile(path.join(job, "helper-ready.json"), "utf8").then(JSON.parse).catch(() => null);

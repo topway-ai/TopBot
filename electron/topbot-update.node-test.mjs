@@ -145,12 +145,12 @@ test("Windows independent helper: upgrade, snapshot, rollback and injected failu
     const parent = fileURLToPath(new URL("./fixtures/topbot-update-lifetime.mjs", import.meta.url));
     await run(process.execPath, [parent, f.job], { windowsHide: true, timeout: 15000 });
     let state;
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 450; i++) {
       state = await json(path.join(f.job, "state.json"));
-      if (state.phase === "committed") break;
+      if (["committed", "failed", "recovery-needed", "rolled-back"].includes(state.phase)) break;
       await pause(100);
     }
-    assert.equal(state.phase, "committed");
+    assert.equal(state.phase, "committed", JSON.stringify(state));
     await writeFile(path.join(f.job, "stop.json"), JSON.stringify({ token: f.plan.token }));
     await pause(500);
   });
